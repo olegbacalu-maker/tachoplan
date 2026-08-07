@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#101319">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TachoPlan Fleet</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#101319;--panel:#181D27;--panel2:#1F2532;--line:#2A3040;--amber:#FFB020;--green:#3DDC84;--red:#FF5A5A;--blue:#5B9DFF;--text:#E8EBF2;--mut:#8B93A7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Barlow','Segoe UI',sans-serif;padding-bottom:80px}
+.mono{font-family:'IBM Plex Mono',monospace}
+.cond{font-family:'Barlow Condensed',sans-serif}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:7px 9px;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none}
+input:focus,select:focus{border-color:var(--amber)}
+button{cursor:pointer;font-family:'Barlow',sans-serif}
+header{border-bottom:1px solid var(--line);padding:18px 20px 14px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.logo{font-family:'Barlow Condensed';font-size:28px;font-weight:700;letter-spacing:1px;color:var(--amber)}
+.logo span{color:var(--text)} .logo em{color:var(--mut);font-size:17px;font-style:normal;margin-left:8px}
+.sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut)}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.chip{background:transparent;border-radius:20px;padding:6px 15px;font-size:13px;font-weight:600}
+.chip.on{background:var(--panel2)}
+.btn-primary{background:var(--amber);color:#181203;border:none;border-radius:6px;padding:8px 18px;font-weight:700;font-size:14px}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:6px;padding:8px 13px;font-size:13px}
+.truck{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:9px;overflow:hidden}
+.truck.open{border-color:var(--amber)}
+.truck.delayed{box-shadow:inset 3px 0 0 var(--amber)}
+.trow{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer;flex-wrap:wrap}
+.trow:hover{background:var(--panel2)}
+.dotst{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.strip{flex:1;min-width:130px;display:flex;height:16px;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.editor{border-top:1px solid var(--line);padding:14px}
+.fields{display:flex;gap:11px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.flab{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;color:var(--mut);margin-bottom:4px}
+.seglist{background:var(--panel2);border-radius:8px;padding:11px}
+.segrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line)}
+.mini{background:transparent;border:none;color:var(--mut);font-size:13px;padding:1px 5px}
+.warn{margin-top:11px;font-size:13px}
+.delaybox{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;padding:11px;border:1px dashed var(--line);border-radius:8px;align-items:flex-end}
+.qbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.footer-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);margin-top:16px;line-height:1.6}
+.empty{color:var(--mut);padding:36px;text-align:center;border:1px dashed var(--line);border-radius:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TACHO<span>PLAN</span><em>FLEET</em></div>
+  <div class="sub" id="headinfo"></div>
+</header>
+<div class="wrap">
+  <div class="toolbar" id="toolbar"></div>
+  <div id="board"></div>
+  <div class="footer-note">
+    Auto 45-min breaks per 4h30 driving · daily 9h/10h · 13h/15h span checks · slot buffer ·
+    traffic delay counts as DRIVING (burns hours), ramp queue counts as OTHER WORK.
+    Weekly limits (56h/90h) &amp; multi-manning not modelled — verify against tachograph. Data saved in this browser.
+  </div>
+</div>
+
+<script>
+"use strict";
+const MIN=60000, MAX_TRUCKS=60, KEY="tachoplan-fleet";
+const SC={ok:"var(--green)",risk:"var(--amber)",violation:"var(--red)"};
+const SL={ok:"LEGAL",risk:"RISK",violation:"VIOLATION"};
+const TCOL={drive:"var(--amber)",other:"var(--blue)",break:"var(--green)"};
+const TLAB={drive:"DRIVE",other:"WORK","break":"BREAK"};
+
+let state={trucks:[],openId:null,filter:"all"};
+
+function fmtHM(m){const h=Math.floor(m/60),mm=Math.round(m%60);return h+"h"+String(mm).padStart(2,"0")}
+function fmtClock(d){return d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}
+function parseTime(str){const[h,m]=(str||"0:0").split(":").map(Number);const d=new Date();d.setHours(h||0,m||0,0,0);return d}
+function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function newTruck(n){return{id:uid(),name:"TRK-"+String(n).padStart(2,"0"),driver:"",start:"06:00",slot:"",extended:false,trafficDelay:0,rampDelay:0,segments:[]}}
+
+function load(){try{const v=localStorage.getItem(KEY);if(v)state.trucks=JSON.parse(v)}catch(e){}
+  if(!state.trucks.length)state.trucks=[newTruck(1),newTruck(2),newTruck(3)]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state.trucks))}catch(e){}}
+
+function simulate(tr){
+  const start=parseTime(tr.start);
+  const driveLimit=(tr.extended?10:9)*60;
+  const events=[];let t=new Date(start),sinceBreak=0,totalDrive=0,totalBreak=0;
+  const warnings=[];
+  const push=(type,label,mins)=>{events.push({type,label,mins,start:new Date(t),end:new Date(t.getTime()+mins*MIN)});t=new Date(t.getTime()+mins*MIN)};
+  const doDrive=(label,mins)=>{let rem=mins;while(rem>0){
+    if(270-sinceBreak<=0){push("break","Break 45m",45);totalBreak+=45;sinceBreak=0;continue}
+    const chunk=Math.min(rem,270-sinceBreak);push("drive",label,chunk);totalDrive+=chunk;sinceBreak+=chunk;rem-=chunk;
+    if(rem>0&&sinceBreak>=270){push("break","Break 45m",45);totalBreak+=45;sinceBreak=0}}};
+
+  for(const seg of tr.segments){
+    if(seg.type==="drive")doDrive(seg.label||"Drive",seg.mins);
+    else{push(seg.type,seg.label||(seg.type==="break"?"Break":"Work"),seg.mins);
+      if(seg.type==="break"){totalBreak+=seg.mins;if(seg.mins>=45)sinceBreak=0}}
+  }
+  // Live delays — applied at end of planned tour
+  if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay);
+  if(tr.rampDelay>0)push("other","⚠ Ramp queue",tr.rampDelay);
+
+  let status="ok";
+  if(totalDrive>driveLimit){status="violation";warnings.push("Driving "+fmtHM(totalDrive)+" > limit "+fmtHM(driveLimit)+(tr.trafficDelay?" (incl. traffic)":""))}
+  else if(driveLimit-totalDrive<30&&totalDrive>0){status="risk";warnings.push("Only "+fmtHM(driveLimit-totalDrive)+" driving reserve")}
+  const span=(t-start)/MIN;
+  if(span>15*60){status="violation";warnings.push("Shift span "+fmtHM(span)+" > 15h max")}
+  else if(span>13*60){if(status==="ok")status="risk";warnings.push("Span "+fmtHM(span)+" → reduced daily rest (9h) required")}
+
+  let slotInfo=null;
+  if(tr.slot){let slot=parseTime(tr.slot);if(slot<start)slot=new Date(slot.getTime()+24*60*MIN);
+    const diff=(slot-t)/MIN;slotInfo={slot,diff};
+    if(diff<0){status="violation";warnings.push("Misses slot by "+fmtHM(-diff)+(tr.trafficDelay||tr.rampDelay?" — consider Amazon dispute/notification":""))}
+    else if(diff<20&&status==="ok"){status="risk";warnings.push("Slot buffer only "+fmtHM(diff))}}
+  return{events,start,end:t,totalDrive,totalBreak,driveLimit,span,warnings,status,slotInfo};
+}
+
+// ---------- actions ----------
+const A={
+  toggle:id=>{state.openId=state.openId===id?null:id;render()},
+  filter:f=>{state.filter=f;render()},
+  add:()=>{if(state.trucks.length>=MAX_TRUCKS)return;const t=newTruck(state.trucks.length+1);state.trucks.push(t);state.openId=t.id;save();render()},
+  dup:id=>{if(state.trucks.length>=MAX_TRUCKS)return;const s=state.trucks.find(t=>t.id===id);
+    state.trucks.push({...JSON.parse(JSON.stringify(s)),id:uid(),name:"TRK-"+String(state.trucks.length+1).padStart(2,"0")});save();render()},
+  del:id=>{state.trucks=state.trucks.filter(t=>t.id!==id);save();render()},
+  reset:()=>{if(confirm("Clear the whole board? This deletes all saved trucks."))
+    {state.trucks=[newTruck(1)];state.openId=null;save();render()}},
+  clearDelays:()=>{state.trucks.forEach(t=>{t.trafficDelay=0;t.rampDelay=0});save();render()},
+  set:(id,field,val)=>{const t=state.trucks.find(t=>t.id===id);if(!t)return;t[field]=val;save();render()},
+  bump:(id,field,inc)=>{const t=state.trucks.find(t=>t.id===id);if(!t)return;
+    t[field]=Math.max(0,(t[field]||0)+inc);save();render()},
+  addSeg:id=>{const t=state.trucks.find(t=>t.id===id);if(!t)return;
+    const type=document.getElementById("st-"+id).value;
+    const label=document.getElementById("sl-"+id).value;
+    const h=parseInt(document.getElementById("sh-"+id).value)||0;
+    const m=parseInt(document.getElementById("sm-"+id).value)||0;
+    const mins=h*60+m;if(mins<=0)return;
+    t.segments.push({type,label,mins});save();render()},
+  rmSeg:(id,i)=>{const t=state.trucks.find(t=>t.id===id);t.segments.splice(i,1);save();render()},
+  mvSeg:(id,i,dir)=>{const t=state.trucks.find(t=>t.id===id);const j=i+dir;
+    if(j<0||j>=t.segments.length)return;
+    [t.segments[i],t.segments[j]]=[t.segments[j],t.segments[i]];save();render()},
+};
+
+// ---------- render ----------
+function render(){
+  const sims={};state.trucks.forEach(t=>sims[t.id]=simulate(t));
+  const counts={ok:0,risk:0,violation:0};state.trucks.forEach(t=>counts[sims[t.id].status]++);
+  const delayed=state.trucks.filter(t=>t.trafficDelay>0||t.rampDelay>0).length;
+
+  document.getElementById("headinfo").textContent=
+    state.trucks.length+"/"+MAX_TRUCKS+" trucks · 561/2006 board"+(delayed?" · "+delayed+" delayed":"");
+
+  document.getElementById("toolbar").innerHTML=
+    ["all","ok","risk","violation"].map(f=>{
+      const on=state.filter===f;
+      const col=f==="all"?"var(--line)":SC[f];
+      const txt=f==="all"?"ALL "+state.trucks.length:SL[f]+" "+counts[f];
+      return `<button class="chip ${on?'on':''}" style="border:1px solid ${col};color:${f==='all'?'var(--text)':SC[f]}" onclick="A.filter('${f}')">${txt}</button>`
+    }).join("")+
+    `<div style="flex:1"></div>
+     <button class="btn-primary" onclick="A.add()" ${state.trucks.length>=MAX_TRUCKS?'disabled style="opacity:.4"':''}>+ Truck</button>
+     <button class="btn-ghost" onclick="A.clearDelays()">Clear delays</button>
+     <button class="btn-ghost" onclick="A.reset()">Reset board</button>`;
+
+  const visible=state.trucks.filter(t=>state.filter==="all"||sims[t.id].status===state.filter);
+  const board=document.getElementById("board");
+  if(!visible.length){board.innerHTML=`<div class="empty">No trucks in this filter. Add a truck to start planning.</div>`;return}
+
+  board.innerHTML=visible.map(tr=>{
+    const s=sims[tr.id],open=state.openId===tr.id,span=Math.max(s.span,1);
+    const hasDelay=tr.trafficDelay>0||tr.rampDelay>0;
+    const strip=s.events.length?s.events.map(e=>
+      `<div title="${esc(e.label)} · ${fmtHM(e.mins)} · ${fmtClock(e.start)}–${fmtClock(e.end)}" style="width:${(e.mins/span)*100}%;background:${TCOL[e.type]};opacity:.9"></div>`).join("")
+      :`<div style="width:100%;background:var(--panel2)"></div>`;
+    const slotTxt=s.slotInfo?(s.slotInfo.diff>=0?"+"+fmtHM(s.slotInfo.diff):"−"+fmtHM(-s.slotInfo.diff)):SL[s.status];
+
+    let editor="";
+    if(open){
+      const segs=tr.segments.map((sg,i)=>
+        `<div class="segrow">
+          <span class="mono" style="font-size:11px;color:${TCOL[sg.type]};width:46px">${TLAB[sg.type]}</span>
+          <span style="flex:1;font-size:13px">${esc(sg.label)||"—"}</span>
+          <span class="mono" style="font-size:12px;color:var(--mut)">${fmtHM(sg.mins)}</span>
+          <button class="mini" onclick="A.mvSeg('${tr.id}',${i},-1)">↑</button>
+          <button class="mini" onclick="A.mvSeg('${tr.id}',${i},1)">↓</button>
+          <button class="mini" style="color:var(--red)" onclick="A.rmSeg('${tr.id}',${i})">✕</button>
+        </div>`).join("");
+      editor=`<div class="editor">
+        <div class="fields">
+          <div><div class="flab">TRUCK</div><input value="${esc(tr.name)}" style="width:88px" onchange="A.set('${tr.id}','name',this.value)"></div>
+          <div><div class="flab">DRIVER</div><input value="${esc(tr.driver)}" placeholder="Name" style="width:125px" onchange="A.set('${tr.id}','driver',this.value)"></div>
+          <div><div class="flab">START</div><input type="time" value="${tr.start}" onchange="A.set('${tr.id}','start',this.value)"></div>
+          <div><div class="flab">SLOT</div><input type="time" value="${tr.slot}" onchange="A.set('${tr.id}','slot',this.value)"></div>
+          <label style="display:flex;gap:7px;align-items:center;font-size:13px;color:var(--mut);padding-bottom:8px">
+            <input type="checkbox" ${tr.extended?"checked":""} style="accent-color:var(--amber);width:15px;height:15px" onchange="A.set('${tr.id}','extended',this.checked)">10h day</label>
+          <div style="flex:1"></div>
+          <button class="btn-ghost" onclick="A.dup('${tr.id}')">Duplicate</button>
+          <button class="btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="A.del('${tr.id}')">Delete</button>
+        </div>
+
+        <div class="delaybox">
+          <div>
+            <div class="flab" style="color:var(--amber)">TRAFFIC DELAY (= DRIVING)</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" min="0" value="${tr.trafficDelay||0}" style="width:66px" onchange="A.set('${tr.id}','trafficDelay',Math.max(0,parseInt(this.value)||0))">
+              <span style="color:var(--mut);font-size:12px">min</span>
+              <button class="qbtn" onclick="A.bump('${tr.id}','trafficDelay',15)">+15</button>
+              <button class="qbtn" onclick="A.bump('${tr.id}','trafficDelay',30)">+30</button>
+            </div>
+          </div>
+          <div>
+            <div class="flab" style="color:var(--blue)">RAMP QUEUE (= OTHER WORK)</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" min="0" value="${tr.rampDelay||0}" style="width:66px" onchange="A.set('${tr.id}','rampDelay',Math.max(0,parseInt(this.value)||0))">
+              <span style="color:var(--mut);font-size:12px">min</span>
+              <button class="qbtn" onclick="A.bump('${tr.id}','rampDelay',15)">+15</button>
+              <button class="qbtn" onclick="A.bump('${tr.id}','rampDelay',30)">+30</button>
+            </div>
+          </div>
+          ${hasDelay?`<button class="btn-ghost" onclick="A.set('${tr.id}','trafficDelay',0);A.set('${tr.id}','rampDelay',0)">Clear</button>`:""}
+        </div>
+
+        <div class="seglist">
+          ${segs}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+            <select id="st-${tr.id}"><option value="drive">Driving</option><option value="other">Other work</option><option value="break">Extra break</option></select>
+            <input id="sl-${tr.id}" placeholder="Label (To FC LEJ1)" style="flex:1;min-width:110px">
+            <input id="sh-${tr.id}" type="number" min="0" value="2" style="width:50px"><span style="color:var(--mut);font-size:12px">h</span>
+            <input id="sm-${tr.id}" type="number" min="0" max="59" value="0" style="width:50px"><span style="color:var(--mut);font-size:12px">m</span>
+            <button class="btn-primary" style="padding:7px 16px;font-size:13px" onclick="A.addSeg('${tr.id}')">Add</button>
+          </div>
+        </div>
+        ${s.warnings.length?`<div class="warn" style="color:${SC[s.status]}">${s.warnings.map(w=>"⚠ "+esc(w)).join("<br>")}</div>`:""}
+      </div>`;
+    }
+
+    return `<div class="truck ${open?'open':''} ${hasDelay?'delayed':''}">
+      <div class="trow" onclick="A.toggle('${tr.id}')">
+        <span class="dotst" style="background:${SC[s.status]}"></span>
+        <span class="mono" style="font-size:14px;font-weight:600;width:72px">${esc(tr.name)}${hasDelay?' <span style="color:var(--amber)">⚠</span>':''}</span>
+        <span style="font-size:13px;color:var(--mut);width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr.driver)||"—"}</span>
+        <div class="strip">${strip}</div>
+        <span class="mono" style="font-size:12px;color:var(--mut);width:112px;text-align:right">${s.events.length?fmtClock(s.start)+"→"+fmtClock(s.end):"no tour"}</span>
+        <span class="mono" style="font-size:12px;width:80px;text-align:right;color:${s.totalDrive>s.driveLimit?'var(--red)':'var(--text)'}">${fmtHM(s.totalDrive)}/${fmtHM(s.driveLimit)}</span>
+        <span class="mono" style="font-size:11px;font-weight:600;width:82px;text-align:right;color:${SC[s.status]}">${slotTxt}</span>
+      </div>${editor}</div>`;
+  }).join("");
+}
+
+load();render();
+</script>
+</body>
+</html>
