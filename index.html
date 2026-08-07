@@ -58,6 +58,10 @@ header{border-bottom:1px solid var(--line);padding:14px 20px 12px;display:flex;a
 .footer-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);margin-top:16px;line-height:1.6}
 .empty{color:var(--mut);padding:36px;text-align:center;border:1px dashed var(--line);border-radius:10px}
 .empty .btn-primary,.empty .btn-ghost{margin:10px 5px 0}
+.importbox{background:var(--panel);border:1px solid var(--amber);border-radius:10px;padding:14px;margin-bottom:14px}
+.importbox textarea{width:100%;min-height:110px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:9px;font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none;resize:vertical}
+.importbox textarea:focus{border-color:var(--amber)}
+.fmt{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);line-height:1.7;margin-top:8px;overflow-x:auto;white-space:pre}
 .drvcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:14px}
 .drvname{font-family:'Barlow Condensed';font-size:20px;font-weight:600;letter-spacing:.5px}
 .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:4px}
@@ -91,6 +95,7 @@ header{border-bottom:1px solid var(--line);padding:14px 20px 12px;display:flex;a
     <span id="toolbar-extra" style="display:contents"></span>
   </div>
   <div class="toolbar" id="toolbar" style="margin-top:-6px"></div>
+  <div id="importbox"></div>
   <div id="board"></div>
   <div id="drivers" style="display:none"></div>
   <div class="footer-note">
@@ -277,8 +282,93 @@ function issuesFor(drv,k){const r=drv[drvKey(k)];if(!r)return[];
   const wk=mondayOf(state.date);
   return r.issues.filter(i=>!i.week||i.week===wk)}
 
+// ---------- CSV import / export ----------
+// Columns (any order, case-insensitive): truck;driver;driver2;crew;date;start;slot;extended;segments
+// segments = "type:minutes:label|type:minutes:label|…"  type: drive · drive2 (crew D2) · other/work · break
+// minutes accepts 300 · 5h · 5h30 · 5:30 · 330m.  Delimiter auto-detected: ; or , or TAB (Excel paste).
+function toMins(v){v=String(v||"").trim().toLowerCase();if(!v)return NaN;
+  let m=v.match(/^(\d+)h(\d{1,2})?$/);if(m)return +m[1]*60+(+m[2]||0);
+  m=v.match(/^(\d+):(\d{1,2})$/);if(m)return +m[1]*60+(+m[2]||0);
+  m=v.match(/^(\d+)m?$/);if(m)return +m[1];return NaN}
+function boolVal(v){return/^(1|y|yes|true|x)$/i.test(String(v||"").trim())}
+function splitLine(line,delim){const out=[];let cur="",q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];
+    if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+    else if(c==='"')q=true;
+    else if(c===delim){out.push(cur);cur=""}
+    else cur+=c}
+  out.push(cur);return out}
+function parseSegments(str,errs,ln){const segs=[];
+  for(const part of String(str||"").split("|").map(s=>s.trim()).filter(Boolean)){
+    const bits=part.split(":");const type0=(bits[0]||"").trim().toLowerCase();
+    const mins=toMins(bits[1]);const label=bits.slice(2).join(":").trim();
+    const map={drive:["drive",1],drive1:["drive",1],drive2:["drive",2],other:["other",1],work:["other",1],"break":["break",1],rest:["break",1]};
+    if(!map[type0]){errs.push("line "+ln+": unknown segment type '"+type0+"'");continue}
+    if(!(mins>0)){errs.push("line "+ln+": bad minutes in '"+part+"'");continue}
+    segs.push({type:map[type0][0],mins,label,who:map[type0][1]})}
+  return segs}
+function parseCSV(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim());
+  if(!lines.length)return{rows:[],errors:["no data"]};
+  const counts=[["\t",(lines[0].match(/\t/g)||[]).length],[";",(lines[0].match(/;/g)||[]).length],[",",(lines[0].match(/,/g)||[]).length]];
+  counts.sort((a,b)=>b[1]-a[1]);const delim=counts[0][1]>0?counts[0][0]:";";
+  const head=splitLine(lines[0],delim).map(h=>h.trim().toLowerCase());
+  const idx=n=>head.indexOf(n);
+  if(idx("truck")<0||idx("segments")<0)return{rows:[],errors:["header must contain at least: truck, segments (got: "+head.join(", ")+")"]};
+  const rows=[],errors=[];
+  for(let i=1;i<lines.length;i++){
+    const f=splitLine(lines[i],delim);const g=n=>{const j=idx(n);return j<0?"":String(f[j]||"").trim()};
+    const ln=i+1;
+    const date=g("date");
+    if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)){errors.push("line "+ln+": date must be YYYY-MM-DD, got '"+date+"'");continue}
+    const start=g("start")||"06:00";
+    if(!/^\d{1,2}:\d{2}$/.test(start)){errors.push("line "+ln+": bad start '"+start+"'");continue}
+    const slot=g("slot");
+    if(slot&&!/^\d{1,2}:\d{2}$/.test(slot)){errors.push("line "+ln+": bad slot '"+slot+"'");continue}
+    rows.push({name:g("truck")||"TRK",driver:g("driver"),driver2:g("driver2"),crew:boolVal(g("crew"))||!!g("driver2"),
+      date:date||state.date,start,slot,extended:boolVal(g("extended")),
+      segments:parseSegments(g("segments"),errors,ln)})}
+  return{rows,errors}}
+function applyImport(rows,mode){
+  const byDate={};rows.forEach(r=>{(byDate[r.date]=byDate[r.date]||[]).push(r)});
+  let added=0,skipped=0;
+  for(const d of Object.keys(byDate)){
+    if(mode==="replace")state.days[d]={trucks:[]};
+    if(!state.days[d])state.days[d]={trucks:[]};
+    const list=state.days[d].trucks;
+    for(const r of byDate[d]){
+      if(list.length>=MAX_TRUCKS){skipped++;continue}
+      list.push({id:uid(),name:r.name,driver:r.driver,driver2:r.driver2,crew:r.crew,start:r.start,slot:r.slot,
+        extended:r.extended,trafficDelay:0,rampDelay:0,segments:r.segments});added++}}
+  save();return{added,skipped,dates:Object.keys(byDate).sort()}}
+function csvField(v){v=String(v==null?"":v);return/[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function exportDayCSV(){
+  const rows=curTrucks().map(t=>[t.name,t.driver,t.driver2,t.crew?1:0,state.date,t.start,t.slot,t.extended?1:0,
+    t.segments.map(s=>((s.type==="drive"&&s.who===2)?"drive2":s.type)+":"+s.mins+":"+String(s.label||"").replace(/\|/g,"/")).join("|")]);
+  const csv="﻿"+["truck;driver;driver2;crew;date;start;slot;extended;segments"]
+    .concat(rows.map(r=>r.map(csvField).join(";"))).join("\r\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download="tachoplan_"+state.date+".csv";a.click();URL.revokeObjectURL(a.href)}
+const EXAMPLE=()=>`truck;driver;driver2;crew;date;start;slot;extended;segments
+TRK-01;Ivan Petrov;;;${state.date};05:30;16:30;;drive:4h30:To FC DTM2|other:30:Trailer swap|drive:3h45:To FC CGN1
+TRK-02;Ana Pop;Boris Ionescu;1;${state.date};06:00;20:00;;drive:4h00:Leg A|drive2:4h00:Leg B (D2)|other:45:Swap
+TRK-03;Mihai Rusu;;;${state.date};07:15;;1;drive:5h00:To FC LEJ1|break:15:Split part 1|drive:4h30:Return`;
+
 // ---------- actions ----------
 const A={
+  importToggle:()=>{state.importOpen=!state.importOpen;render()},
+  importExample:()=>{const ta=document.getElementById("csvtext");if(ta)ta.value=EXAMPLE()},
+  importFile:input=>{const f=input.files&&input.files[0];if(!f)return;
+    const rd=new FileReader();rd.onload=()=>{document.getElementById("csvtext").value=rd.result;A.importRun()};rd.readAsText(f)},
+  importRun:()=>{const ta=document.getElementById("csvtext");if(!ta||!ta.value.trim())return;
+    const mode=document.querySelector('input[name="impmode"]:checked').value;
+    const{rows,errors}=parseCSV(ta.value);
+    const res=rows.length?applyImport(rows,mode):{added:0,skipped:0,dates:[]};
+    state.importReport={errors,...res};
+    if(res.dates.length&&!res.dates.includes(state.date))state.date=res.dates[0];
+    render()},
+  exportDay:()=>exportDayCSV(),
   toggle:id=>{state.openId=state.openId===id?null:id;render()},
   filter:f=>{state.filter=f;render()},
   view:v=>{state.view=v;render()},
@@ -329,10 +419,45 @@ function render(){
     today.length+"/"+MAX_TRUCKS+" trucks · 561/2006 board"+(delayed?" · "+delayed+" delayed":"");
   document.getElementById("tab-board").className="viewtab"+(state.view==="board"?" on":"");
   document.getElementById("tab-drivers").className="viewtab"+(state.view==="drivers"?" on":"");
+  document.getElementById("toolbar-extra").innerHTML=
+    `<button class="btn-ghost" style="${state.importOpen?'color:var(--amber);border-color:var(--amber)':''}" onclick="A.importToggle()">Import</button>
+     <button class="btn-ghost" onclick="A.exportDay()">Export CSV</button>`;
+  renderImport();
   document.getElementById("board").style.display=state.view==="board"?"":"none";
   document.getElementById("drivers").style.display=state.view==="drivers"?"":"none";
   if(state.view==="board")renderBoard(today,drv);
   else{document.getElementById("toolbar").innerHTML="";renderDrivers(drv)}
+}
+
+function renderImport(){
+  const box=document.getElementById("importbox");
+  if(!state.importOpen){box.innerHTML="";return}
+  const prevTa=document.getElementById("csvtext");
+  const keep=prevTa?prevTa.value:"";
+  const rep=state.importReport;
+  box.innerHTML=`<div class="importbox">
+    <div class="flab" style="color:var(--amber)">IMPORT TOURS — CSV FILE, OR PASTE FROM EXCEL / TMS EXPORT</div>
+    <textarea id="csvtext" placeholder="Paste CSV / Excel rows here — or choose a file below"></textarea>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:9px">
+      <input type="file" id="csvfile" accept=".csv,.txt,.tsv" style="display:none" onchange="A.importFile(this)">
+      <button class="btn-ghost" onclick="document.getElementById('csvfile').click()">Choose file…</button>
+      <label style="font-size:13px;color:var(--mut);display:flex;gap:5px;align-items:center"><input type="radio" name="impmode" value="replace" checked style="accent-color:var(--amber)">Replace day(s)</label>
+      <label style="font-size:13px;color:var(--mut);display:flex;gap:5px;align-items:center"><input type="radio" name="impmode" value="append" style="accent-color:var(--amber)">Add to day(s)</label>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" onclick="A.importExample()">Load example</button>
+      <button class="btn-primary" onclick="A.importRun()">Import</button>
+    </div>
+    ${rep?`<div class="warn">
+      <span style="color:${rep.added?"var(--green)":"var(--red)"}">${rep.added} truck${rep.added===1?"":"s"} imported${rep.dates.length?" → "+rep.dates.join(", "):""}${rep.skipped?" · "+rep.skipped+" skipped (60/day cap)":""}</span>
+      ${rep.errors.length?"<br>"+rep.errors.slice(0,8).map(e=>`<span style="color:var(--red)">✕ ${esc(e)}</span>`).join("<br>")+(rep.errors.length>8?"<br>…"+(rep.errors.length-8)+" more":""):""}
+    </div>`:""}
+    <div class="fmt">Columns (any order): truck; driver; driver2; crew; date; start; slot; extended; segments
+segments = type:minutes:label | type:minutes:label | …   ·   type: drive · drive2 (crew) · other · break
+minutes: 300 or 5h00 or 5:30   ·   date YYYY-MM-DD (empty = current day)   ·   crew/extended: 1 or empty
+Delimiter auto-detected (; , or TAB) — paste straight from Excel works.</div>
+  </div>`;
+  if(keep&&!rep)document.getElementById("csvtext").value=keep;
+  if(rep)delete state.importReport;
 }
 
 function truckStatus(x,drv){ // day status escalated by this-week driver issues
