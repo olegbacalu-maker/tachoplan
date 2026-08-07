@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#101319">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TachoPlan Fleet</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#101319;--panel:#181D27;--panel2:#1F2532;--line:#2A3040;--amber:#FFB020;--green:#3DDC84;--red:#FF5A5A;--blue:#5B9DFF;--text:#E8EBF2;--mut:#8B93A7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Barlow','Segoe UI',sans-serif;padding-bottom:80px}
+.mono{font-family:'IBM Plex Mono',monospace}
+.cond{font-family:'Barlow Condensed',sans-serif}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:7px 9px;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none}
+input:focus,select:focus{border-color:var(--amber)}
+input[type=date]{color-scheme:dark}
+button{cursor:pointer;font-family:'Barlow',sans-serif}
+header{border-bottom:1px solid var(--line);padding:14px 20px 12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-family:'Barlow Condensed';font-size:28px;font-weight:700;letter-spacing:1px;color:var(--amber)}
+.logo span{color:var(--text)} .logo em{color:var(--mut);font-size:17px;font-style:normal;margin-left:8px}
+.sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut)}
+.datebar{display:flex;gap:7px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.navbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 12px;font-size:15px;line-height:1}
+.daylab{font-family:'Barlow Condensed';font-size:15px;letter-spacing:1px;color:var(--text);min-width:88px;text-align:center}
+.daylab small{color:var(--mut);display:block;font-size:11px;letter-spacing:2px}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.chip{background:transparent;border-radius:20px;padding:6px 15px;font-size:13px;font-weight:600}
+.chip.on{background:var(--panel2)}
+.viewtab{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:6px;padding:7px 16px;font-size:13px;font-weight:700;letter-spacing:1px;font-family:'Barlow Condensed',sans-serif}
+.viewtab.on{background:var(--panel2);color:var(--amber);border-color:var(--amber)}
+.btn-primary{background:var(--amber);color:#181203;border:none;border-radius:6px;padding:8px 18px;font-weight:700;font-size:14px}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:6px;padding:8px 13px;font-size:13px}
+.truck{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:9px;overflow:hidden}
+.truck.open{border-color:var(--amber)}
+.truck.delayed{box-shadow:inset 3px 0 0 var(--amber)}
+.trow{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer;flex-wrap:wrap}
+.trow:hover{background:var(--panel2)}
+.dotst{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.strip{flex:1;min-width:130px;display:flex;height:16px;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.editor{border-top:1px solid var(--line);padding:14px}
+.fields{display:flex;gap:11px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.flab{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;color:var(--mut);margin-bottom:4px}
+.seglist{background:var(--panel2);border-radius:8px;padding:11px}
+.segrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line)}
+.mini{background:transparent;border:none;color:var(--mut);font-size:13px;padding:1px 5px}
+.warn{margin-top:11px;font-size:13px;line-height:1.55}
+.delaybox{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;padding:11px;border:1px dashed var(--line);border-radius:8px;align-items:flex-end}
+.qbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.dchip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:4px;padding:1px 7px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer}
+.dchip.d1{color:var(--amber);border-color:var(--amber)}
+.dchip.d2{color:var(--blue);border-color:var(--blue)}
+.crewtag{font-size:10px;color:var(--blue);border:1px solid var(--blue);border-radius:3px;padding:0 4px;font-family:'IBM Plex Mono',monospace}
+.footer-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);margin-top:16px;line-height:1.6}
+.empty{color:var(--mut);padding:36px;text-align:center;border:1px dashed var(--line);border-radius:10px}
+.empty .btn-primary,.empty .btn-ghost{margin:10px 5px 0}
+.drvcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:14px}
+.drvname{font-family:'Barlow Condensed';font-size:20px;font-weight:600;letter-spacing:.5px}
+.bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:4px}
+.bar>div{height:100%}
+.stat{min-width:150px;flex:1}
+.statlab{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;color:var(--mut)}
+.statval{font-family:'IBM Plex Mono',monospace;font-size:14px;margin-top:2px}
+.daychips{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.daychip{border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--mut);text-align:center;min-width:58px}
+.daychip b{display:block;color:var(--text);font-weight:500}
+.daychip.today{border-color:var(--amber)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TACHO<span>PLAN</span><em>FLEET</em></div>
+  <div class="sub" id="headinfo"></div>
+  <div class="datebar">
+    <button class="navbtn" onclick="A.shiftDay(-1)">‹</button>
+    <div class="daylab" id="daylab"></div>
+    <button class="navbtn" onclick="A.shiftDay(1)">›</button>
+    <input type="date" id="datepick" onchange="A.gotoDate(this.value)">
+    <button class="btn-ghost" onclick="A.gotoToday()">Today</button>
+  </div>
+</header>
+<div class="wrap">
+  <div class="toolbar">
+    <button class="viewtab" id="tab-board" onclick="A.view('board')">BOARD</button>
+    <button class="viewtab" id="tab-drivers" onclick="A.view('drivers')">DRIVERS</button>
+    <div style="flex:1"></div>
+    <span id="toolbar-extra" style="display:contents"></span>
+  </div>
+  <div class="toolbar" id="toolbar" style="margin-top:-6px"></div>
+  <div id="board"></div>
+  <div id="drivers" style="display:none"></div>
+  <div class="footer-note">
+    Auto breaks per 4h30 driving (45m, or 30m after a 15m first part) · split break 15+30 · daily 9h/10h (max 2×10h per week) ·
+    weekly 56h / two-week 90h · daily rest 11h/9h (max 3 reduced) · weekly rest 45h/24h + compensation ·
+    multi-manning: 21h crew window, passenger time counts as break ·
+    traffic delay = DRIVING (burns hours), ramp queue = OTHER WORK.
+    Weekly stats count only days present in this planner — final check is always the tachograph.
+  </div>
+</div>
+
+<script>
+"use strict";
+const MIN=60000, MAX_TRUCKS=60, KEY="tachoplan-v2", OLDKEY="tachoplan-fleet";
+const SC={ok:"var(--green)",risk:"var(--amber)",violation:"var(--red)"};
+const SL={ok:"LEGAL",risk:"RISK",violation:"VIOLATION"};
+const RANK={ok:0,risk:1,violation:2};
+const TCOL={drive:"var(--amber)",drive2:"#FFD470",other:"var(--blue)",break:"var(--green)"};
+const TLAB={drive:"DRIVE",other:"WORK","break":"BREAK"};
+
+let state={version:2,days:{},date:todayStr(),openId:null,filter:"all",view:"board"};
+
+// ---------- date utils (local time, fixed weeks Mon 00:00 – Sun 24:00 per Reg 561/2006) ----------
+function pad2(n){return String(n).padStart(2,"0")}
+function fmtDate(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())}
+function todayStr(){return fmtDate(new Date())}
+function dateFromStr(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function addDays(s,n){const d=dateFromStr(s);d.setDate(d.getDate()+n);return fmtDate(d)}
+function mondayOf(s){const d=dateFromStr(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return fmtDate(d)}
+const WD=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function dayLabel(s){const d=dateFromStr(s);return{wd:WD[(d.getDay()+6)%7],dm:pad2(d.getDate())+"."+pad2(d.getMonth()+1)}}
+function fmtHM(m){const neg=m<0;m=Math.abs(m);const h=Math.floor(m/60),mm=Math.round(m%60);return(neg?"−":"")+h+"h"+pad2(mm)}
+function fmtClock(d){return d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}
+function parseTime(str,dateStr){const[h,m]=(str||"0:0").split(":").map(Number);const d=dateFromStr(dateStr||state.date);d.setHours(h||0,m||0,0,0);return d}
+function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function drvKey(name){return(name||"").trim().replace(/\s+/g," ").toLowerCase()}
+
+function newTruck(n){return{id:uid(),name:"TRK-"+pad2(n),driver:"",driver2:"",crew:false,start:"06:00",slot:"",extended:false,trafficDelay:0,rampDelay:0,segments:[]}}
+
+// ---------- storage & migration ----------
+function load(){
+  try{const v=localStorage.getItem(KEY);
+    if(v){const p=JSON.parse(v);if(p&&p.days){state.days=p.days;return}}
+  }catch(e){}
+  try{const old=localStorage.getItem(OLDKEY); // v1: single-day board → becomes today
+    if(old){const trucks=JSON.parse(old);
+      if(Array.isArray(trucks)&&trucks.length){
+        trucks.forEach(t=>{t.driver2=t.driver2||"";t.crew=!!t.crew;(t.segments||[]).forEach(s=>{if(!s.who)s.who=1})});
+        state.days[todayStr()]={trucks};save()}}
+  }catch(e){}
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({version:2,days:state.days}))}catch(e){}}
+function curTrucks(){return(state.days[state.date]||{trucks:[]}).trucks}
+function ensureDay(){if(!state.days[state.date])state.days[state.date]={trucks:[]}}
+function prevDayWithData(){return Object.keys(state.days).filter(d=>d<state.date&&(state.days[d].trucks||[]).length).sort().pop()||null}
+function pruneEmptyDays(){for(const d of Object.keys(state.days))if(!(state.days[d].trucks||[]).length)delete state.days[d]}
+
+// ---------- tour simulation (one truck, one day) ----------
+// Models: 4h30 continuous driving → 45m break, or split 15m + ≥30m (in that order);
+// daily driving 9h / 10h extended; solo span 13h/15h; crew (multi-manning) span 21h
+// within the 30h window incl. 9h rest; ≥45m contiguous passenger time while the
+// co-driver drives counts as a break (Art. 7).
+function simulate(tr,dateStr){
+  dateStr=dateStr||state.date;
+  const crew=!!tr.crew;
+  const start=parseTime(tr.start,dateStr);
+  const driveLimit=(tr.extended?10:9)*60;
+  const events=[],warnings=[];
+  let t=new Date(start),totalBreak=0;
+  const D={1:{drive:0,since:0,armed:false,pass:0},2:{drive:0,since:0,armed:false,pass:0}};
+  const push=(type,label,mins,who)=>{events.push({type,label,mins,who:who||0,start:new Date(t),end:new Date(t.getTime()+mins*MIN)});t=new Date(t.getTime()+mins*MIN)};
+  const restAll=mins=>{for(const w of[1,2]){const dr=D[w];
+    if(mins>=45){dr.since=0;dr.armed=false;dr.pass=0}
+    else if(mins>=30&&dr.armed){dr.since=0;dr.armed=false;dr.pass=0}
+    else if(mins>=15&&!dr.armed)dr.armed=true}};
+  const autoBreak=w=>{const need=D[w].armed?30:45;
+    push("break","Break "+need+"m"+(D[w].armed?" (2nd part)":"")+(crew?" D"+w:""),need);
+    totalBreak+=need;restAll(need)};
+  const doDrive=(label,mins,who)=>{who=crew?(who||1):1;let rem=mins;
+    while(rem>0){const dr=D[who];
+      if(270-dr.since<=0){autoBreak(who);continue}
+      const chunk=Math.min(rem,270-dr.since);
+      push(who===2?"drive2":"drive",label,chunk,who);
+      dr.drive+=chunk;dr.since+=chunk;dr.pass=0;rem-=chunk;
+      if(crew){const o=who===1?2:1;D[o].pass+=chunk; // passenger in moving vehicle
+        if(D[o].pass>=45||(D[o].armed&&D[o].pass>=30)){D[o].since=0;D[o].armed=false;D[o].pass=0}}
+      if(rem>0&&dr.since>=270)autoBreak(who)}};
+
+  for(const seg of tr.segments){
+    if(seg.type==="drive")doDrive(seg.label||"Drive",seg.mins,seg.who);
+    else if(seg.type==="break"){push("break",seg.label||"Break",seg.mins);totalBreak+=seg.mins;restAll(seg.mins)}
+    else{push("other",seg.label||"Work",seg.mins);D[1].pass=0;D[2].pass=0}
+  }
+  // Live delays — applied at end of planned tour
+  if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
+  if(tr.rampDelay>0){push("other","⚠ Ramp queue",tr.rampDelay);D[1].pass=0;D[2].pass=0}
+
+  let status="ok";
+  const lift=s=>{if(RANK[s]>RANK[status])status=s};
+  const active=crew?[1,2]:[1];
+  for(const w of active){const dr=D[w],tag=crew?"D"+w+" ":"";
+    if(dr.drive>driveLimit){lift("violation");warnings.push(tag+"driving "+fmtHM(dr.drive)+" > limit "+fmtHM(driveLimit)+(tr.trafficDelay&&w===1?" (incl. traffic)":""))}
+    else if(driveLimit-dr.drive<30&&dr.drive>0){lift("risk");warnings.push(tag+"only "+fmtHM(driveLimit-dr.drive)+" driving reserve")}}
+  const span=(t-start)/MIN;
+  if(crew){
+    if(span>21*60){lift("violation");warnings.push("Crew span "+fmtHM(span)+" > 21h (30h window − 9h rest)")}
+    else if(span>19*60){lift("risk");warnings.push("Crew span "+fmtHM(span)+" — approaching 21h window")}
+  }else{
+    if(span>15*60){lift("violation");warnings.push("Shift span "+fmtHM(span)+" > 15h max")}
+    else if(span>13*60){lift("risk");warnings.push("Span "+fmtHM(span)+" → reduced daily rest (9h) required")}
+  }
+  let slotInfo=null;
+  if(tr.slot){let slot=parseTime(tr.slot,dateStr);if(slot<start)slot=new Date(slot.getTime()+24*60*MIN);
+    const diff=(slot-t)/MIN;slotInfo={slot,diff};
+    if(diff<0){lift("violation");warnings.push("Misses slot by "+fmtHM(-diff)+(tr.trafficDelay||tr.rampDelay?" — consider Amazon dispute/notification":""))}
+    else if(diff<20&&status==="ok"){lift("risk");warnings.push("Slot buffer only "+fmtHM(diff))}}
+  const totalDrive=D[1].drive+D[2].drive;
+  return{events,start,end:t,totalDrive,d1:D[1].drive,d2:D[2].drive,totalBreak,driveLimit,span,warnings,status,slotInfo,crew};
+}
+
+// ---------- fleet-wide sims & per-driver weekly analytics ----------
+function simAll(){const out={};for(const d of Object.keys(state.days))
+  out[d]=(state.days[d].trucks||[]).map(tr=>({tr,sim:simulate(tr,d)}));return out}
+
+// Rest gap classification between duty days:
+// <9h violation · 9–11h reduced daily rest (max 3 between weekly rests) · ≥24h weekly rest
+// (24–45h reduced → compensation due en bloc by end of 3rd following week; two consecutive
+// reduced weekly rests flagged per Art. 8(6); >6×24h since last weekly rest → overdue).
+function analyzeDrivers(sims){
+  const map={};
+  for(const date of Object.keys(sims)){
+    for(const{tr,sim}of sims[date]){
+      const roles=[[1,tr.driver,sim.d1]];if(tr.crew)roles.push([2,tr.driver2,sim.d2]);
+      for(const[,name,drive]of roles){const k=drvKey(name);if(!k)continue;
+        const rec=map[k]||(map[k]={name:name.trim(),days:{}});
+        const dd=rec.days[date]||(rec.days[date]={drive:0,start:sim.start,end:sim.end,trucks:[]});
+        dd.drive+=drive;dd.trucks.push(tr.name);
+        if(sim.start<dd.start)dd.start=sim.start;
+        if(sim.end>dd.end)dd.end=sim.end}}}
+  for(const k of Object.keys(map)){
+    const r=map[k];r.issues=[];
+    const dates=Object.keys(r.days).sort();r.dates=dates;
+    // fixed-week aggregates
+    r.weeks={};
+    for(const d of dates){const wk=mondayOf(d);const w=r.weeks[wk]||(r.weeks[wk]={drive:0,ext:[]});
+      w.drive+=r.days[d].drive;if(r.days[d].drive>9*60)w.ext.push(d)}
+    for(const wk of Object.keys(r.weeks)){const w=r.weeks[wk];
+      if(w.drive>56*60)r.issues.push({level:"violation",week:wk,msg:"weekly driving "+fmtHM(w.drive)+" > 56h (week "+dayLabel(wk).dm+")"});
+      const prev=r.weeks[addDays(wk,-7)];
+      if(prev&&prev.drive+w.drive>90*60)r.issues.push({level:"violation",week:wk,msg:"two-week driving "+fmtHM(prev.drive+w.drive)+" > 90h"});
+      if(w.ext.length>2)r.issues.push({level:"violation",week:wk,msg:w.ext.length+"× extended (>9h) days in week "+dayLabel(wk).dm+" — max 2"})}
+    // rest analysis over consecutive duty days
+    r.rests=[];let reduced=0;r.comp=[];let lastWeeklyEnd=null;let prevWeeklyReduced=false;
+    for(let i=1;i<dates.length;i++){
+      const a=r.days[dates[i-1]],b=r.days[dates[i]];
+      const gap=(b.start-a.end)/MIN;const gh=gap/60;
+      const lbl=dayLabel(dates[i-1]).dm+"→"+dayLabel(dates[i]).dm;
+      if(gap<0){r.issues.push({level:"violation",msg:"overlapping duty "+lbl+" (tour ends after next start)"})}
+      else if(gh<9){r.issues.push({level:"violation",msg:"rest "+fmtHM(gap)+" ("+lbl+") < 9h minimum"})}
+      else if(gh<11){reduced++;r.rests.push({t:"reduced",gap,lbl});
+        if(reduced>3)r.issues.push({level:"violation",msg:reduced+"× reduced daily rests since last weekly rest — max 3"});}
+      else if(gh<24){r.rests.push({t:"daily",gap,lbl})}
+      else{ // weekly rest
+        const red=gh<45;
+        r.rests.push({t:red?"weekly-reduced":"weekly",gap,lbl});
+        if(red){const owe=45*60-gap;const due=addDays(mondayOf(dates[i]),27);
+          r.comp.push({owe,due,lbl});
+          if(prevWeeklyReduced)r.issues.push({level:"risk",msg:"two consecutive reduced weekly rests ("+lbl+") — Art. 8(6): one must be regular 45h"});
+          prevWeeklyReduced=true}
+        else prevWeeklyReduced=false;
+        reduced=0;lastWeeklyEnd=b.start}}
+    // weekly rest overdue: >6 daily driving periods since last weekly rest (within data)
+    if(dates.length){
+      const anchor=lastWeeklyEnd||r.days[dates[0]].start;
+      const lastEnd=r.days[dates[dates.length-1]].end;
+      const spanH=(lastEnd-anchor)/MIN/60;
+      if(spanH>6*24)r.issues.push({level:"violation",msg:"no weekly rest for "+Math.floor(spanH/24)+" days — due after 6×24h"})}
+  }
+  return map;
+}
+// issues relevant for the viewed date's board (current fixed week + undated rest issues)
+function issuesFor(drv,k){const r=drv[drvKey(k)];if(!r)return[];
+  const wk=mondayOf(state.date);
+  return r.issues.filter(i=>!i.week||i.week===wk)}
+
+// ---------- actions ----------
+const A={
+  toggle:id=>{state.openId=state.openId===id?null:id;render()},
+  filter:f=>{state.filter=f;render()},
+  view:v=>{state.view=v;render()},
+  shiftDay:n=>{state.date=addDays(state.date,n);state.openId=null;render()},
+  gotoDate:v=>{if(v){state.date=v;state.openId=null;render()}},
+  gotoToday:()=>{state.date=todayStr();state.openId=null;render()},
+  copyPrev:()=>{const src=prevDayWithData();if(!src)return;ensureDay();
+    state.days[state.date].trucks=state.days[src].trucks.map(t=>({...JSON.parse(JSON.stringify(t)),id:uid(),trafficDelay:0,rampDelay:0}));
+    save();render()},
+  add:()=>{ensureDay();const list=curTrucks();if(list.length>=MAX_TRUCKS)return;
+    const t=newTruck(list.length+1);list.push(t);state.openId=t.id;save();render()},
+  dup:id=>{const list=curTrucks();if(list.length>=MAX_TRUCKS)return;const s=list.find(t=>t.id===id);
+    list.push({...JSON.parse(JSON.stringify(s)),id:uid(),name:"TRK-"+pad2(list.length+1)});save();render()},
+  del:id=>{ensureDay();state.days[state.date].trucks=curTrucks().filter(t=>t.id!==id);pruneEmptyDays();save();render()},
+  reset:()=>{if(confirm("Clear this day? ("+state.date+") This deletes its trucks."))
+    {delete state.days[state.date];state.openId=null;save();render()}},
+  clearDelays:()=>{curTrucks().forEach(t=>{t.trafficDelay=0;t.rampDelay=0});save();render()},
+  set:(id,field,val)=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;t[field]=val;save();render()},
+  bump:(id,field,inc)=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;
+    t[field]=Math.max(0,(t[field]||0)+inc);save();render()},
+  addSeg:id=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;
+    const type=document.getElementById("st-"+id).value;
+    const label=document.getElementById("sl-"+id).value;
+    const h=parseInt(document.getElementById("sh-"+id).value)||0;
+    const m=parseInt(document.getElementById("sm-"+id).value)||0;
+    const whoEl=document.getElementById("sw-"+id);
+    const mins=h*60+m;if(mins<=0)return;
+    t.segments.push({type,label,mins,who:whoEl?parseInt(whoEl.value):1});save();render()},
+  rmSeg:(id,i)=>{const t=curTrucks().find(t=>t.id===id);t.segments.splice(i,1);save();render()},
+  mvSeg:(id,i,dir)=>{const t=curTrucks().find(t=>t.id===id);const j=i+dir;
+    if(j<0||j>=t.segments.length)return;
+    [t.segments[i],t.segments[j]]=[t.segments[j],t.segments[i]];save();render()},
+  segWho:(id,i)=>{const t=curTrucks().find(t=>t.id===id);const s=t.segments[i];
+    s.who=s.who===2?1:2;save();render()},
+};
+
+// ---------- render ----------
+function render(){
+  const sims=simAll();
+  const drv=analyzeDrivers(sims);
+  drvAnalysisCache=drv;
+  const today=sims[state.date]||[];
+  const dl=dayLabel(state.date);
+  document.getElementById("daylab").innerHTML="<small>"+dl.wd.toUpperCase()+(state.date===todayStr()?" · TODAY":"")+"</small>"+dl.dm;
+  document.getElementById("datepick").value=state.date;
+  const delayed=today.filter(x=>x.tr.trafficDelay>0||x.tr.rampDelay>0).length;
+  document.getElementById("headinfo").textContent=
+    today.length+"/"+MAX_TRUCKS+" trucks · 561/2006 board"+(delayed?" · "+delayed+" delayed":"");
+  document.getElementById("tab-board").className="viewtab"+(state.view==="board"?" on":"");
+  document.getElementById("tab-drivers").className="viewtab"+(state.view==="drivers"?" on":"");
+  document.getElementById("board").style.display=state.view==="board"?"":"none";
+  document.getElementById("drivers").style.display=state.view==="drivers"?"":"none";
+  if(state.view==="board")renderBoard(today,drv);
+  else{document.getElementById("toolbar").innerHTML="";renderDrivers(drv)}
+}
+
+function truckStatus(x,drv){ // day status escalated by this-week driver issues
+  let st=x.sim.status;const extra=[];
+  const names=[x.tr.driver];if(x.tr.crew)names.push(x.tr.driver2);
+  for(const n of names){if(!drvKey(n))continue;
+    for(const i of issuesFor(drv,n)){
+      if(RANK[i.level]>RANK[st])st=i.level;
+      extra.push({level:i.level,msg:n.trim()+": "+i.msg})}}
+  return{st,extra};
+}
+
+function renderBoard(today,drv){
+  const counts={ok:0,risk:0,violation:0};
+  const rows=today.map(x=>{const{st,extra}=truckStatus(x,drv);counts[st]++;return{...x,st,extra}});
+  document.getElementById("toolbar").innerHTML=
+    ["all","ok","risk","violation"].map(f=>{
+      const on=state.filter===f;
+      const col=f==="all"?"var(--line)":SC[f];
+      const txt=f==="all"?"ALL "+rows.length:SL[f]+" "+counts[f];
+      return `<button class="chip ${on?'on':''}" style="border:1px solid ${col};color:${f==='all'?'var(--text)':SC[f]}" onclick="A.filter('${f}')">${txt}</button>`
+    }).join("")+
+    `<div style="flex:1"></div>
+     <button class="btn-primary" onclick="A.add()" ${rows.length>=MAX_TRUCKS?'disabled style="opacity:.4"':''}>+ Truck</button>
+     <button class="btn-ghost" onclick="A.clearDelays()">Clear delays</button>
+     <button class="btn-ghost" onclick="A.reset()">Clear day</button>`;
+
+  const visible=rows.filter(r=>state.filter==="all"||r.st===state.filter);
+  const board=document.getElementById("board");
+  if(!rows.length){const prev=prevDayWithData();
+    board.innerHTML=`<div class="empty">No trucks planned for ${dayLabel(state.date).wd} ${dayLabel(state.date).dm}.<br>
+      <button class="btn-primary" onclick="A.add()">+ Truck</button>
+      ${prev?`<button class="btn-ghost" onclick="A.copyPrev()">Copy board from ${dayLabel(prev).dm}</button>`:""}</div>`;return}
+  if(!visible.length){board.innerHTML=`<div class="empty">No trucks in this filter.</div>`;return}
+
+  board.innerHTML=visible.map(({tr,sim:s,st,extra})=>{
+    const open=state.openId===tr.id,span=Math.max(s.span,1);
+    const hasDelay=tr.trafficDelay>0||tr.rampDelay>0;
+    const strip=s.events.length?s.events.map(e=>
+      `<div title="${esc(e.label)} · ${fmtHM(e.mins)} · ${fmtClock(e.start)}–${fmtClock(e.end)}" style="width:${(e.mins/span)*100}%;background:${TCOL[e.type]};opacity:.9"></div>`).join("")
+      :`<div style="width:100%;background:var(--panel2)"></div>`;
+    const slotTxt=s.slotInfo?(s.slotInfo.diff>=0?"+"+fmtHM(s.slotInfo.diff):"−"+fmtHM(-s.slotInfo.diff)):SL[st];
+    const driveTxt=tr.crew?fmtHM(Math.max(s.d1,s.d2))+"*":fmtHM(s.totalDrive);
+    const driveTitle=tr.crew?`D1 ${fmtHM(s.d1)} · D2 ${fmtHM(s.d2)} · limit ${fmtHM(s.driveLimit)} each`:"";
+
+    let editor="";
+    if(open){
+      const segs=tr.segments.map((sg,i)=>
+        `<div class="segrow">
+          <span class="mono" style="font-size:11px;color:${TCOL[sg.type]};width:46px">${TLAB[sg.type]}</span>
+          ${tr.crew&&sg.type==="drive"?`<button class="dchip d${sg.who===2?2:1}" title="Click to switch driver" onclick="A.segWho('${tr.id}',${i})">D${sg.who===2?2:1}</button>`:""}
+          <span style="flex:1;font-size:13px">${esc(sg.label)||"—"}</span>
+          <span class="mono" style="font-size:12px;color:var(--mut)">${fmtHM(sg.mins)}</span>
+          <button class="mini" onclick="A.mvSeg('${tr.id}',${i},-1)">↑</button>
+          <button class="mini" onclick="A.mvSeg('${tr.id}',${i},1)">↓</button>
+          <button class="mini" style="color:var(--red)" onclick="A.rmSeg('${tr.id}',${i})">✕</button>
+        </div>`).join("");
+      const wkLines=[];
+      for(const nm of[tr.driver,tr.crew?tr.driver2:""]){const k=drvKey(nm);if(!k)continue;
+        const r=drv[k];if(!r)continue;
+        const wk=r.weeks[mondayOf(state.date)];
+        if(wk)wkLines.push(`${esc(nm.trim())}: week ${fmtHM(wk.drive)}/56h00 · left ${fmtHM(Math.max(0,56*60-wk.drive))} · 10h-days ${wk.ext.length}/2`)}
+      editor=`<div class="editor">
+        <div class="fields">
+          <div><div class="flab">TRUCK</div><input value="${esc(tr.name)}" style="width:88px" onchange="A.set('${tr.id}','name',this.value)"></div>
+          <div><div class="flab">DRIVER${tr.crew?" 1":""}</div><input value="${esc(tr.driver)}" placeholder="Name" style="width:125px" onchange="A.set('${tr.id}','driver',this.value)"></div>
+          ${tr.crew?`<div><div class="flab" style="color:var(--blue)">DRIVER 2</div><input value="${esc(tr.driver2)}" placeholder="Name" style="width:125px" onchange="A.set('${tr.id}','driver2',this.value)"></div>`:""}
+          <div><div class="flab">START</div><input type="time" value="${tr.start}" onchange="A.set('${tr.id}','start',this.value)"></div>
+          <div><div class="flab">SLOT</div><input type="time" value="${tr.slot}" onchange="A.set('${tr.id}','slot',this.value)"></div>
+          <label style="display:flex;gap:7px;align-items:center;font-size:13px;color:var(--mut);padding-bottom:8px">
+            <input type="checkbox" ${tr.extended?"checked":""} style="accent-color:var(--amber);width:15px;height:15px" onchange="A.set('${tr.id}','extended',this.checked)">10h day</label>
+          <label style="display:flex;gap:7px;align-items:center;font-size:13px;color:var(--mut);padding-bottom:8px">
+            <input type="checkbox" ${tr.crew?"checked":""} style="accent-color:var(--blue);width:15px;height:15px" onchange="A.set('${tr.id}','crew',this.checked)">Crew 2×</label>
+          <div style="flex:1"></div>
+          <button class="btn-ghost" onclick="A.dup('${tr.id}')">Duplicate</button>
+          <button class="btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="A.del('${tr.id}')">Delete</button>
+        </div>
+
+        <div class="delaybox">
+          <div>
+            <div class="flab" style="color:var(--amber)">TRAFFIC DELAY (= DRIVING${tr.crew?" D1":""})</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" min="0" value="${tr.trafficDelay||0}" style="width:66px" onchange="A.set('${tr.id}','trafficDelay',Math.max(0,parseInt(this.value)||0))">
+              <span style="color:var(--mut);font-size:12px">min</span>
+              <button class="qbtn" onclick="A.bump('${tr.id}','trafficDelay',15)">+15</button>
+              <button class="qbtn" onclick="A.bump('${tr.id}','trafficDelay',30)">+30</button>
+            </div>
+          </div>
+          <div>
+            <div class="flab" style="color:var(--blue)">RAMP QUEUE (= OTHER WORK)</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" min="0" value="${tr.rampDelay||0}" style="width:66px" onchange="A.set('${tr.id}','rampDelay',Math.max(0,parseInt(this.value)||0))">
+              <span style="color:var(--mut);font-size:12px">min</span>
+              <button class="qbtn" onclick="A.bump('${tr.id}','rampDelay',15)">+15</button>
+              <button class="qbtn" onclick="A.bump('${tr.id}','rampDelay',30)">+30</button>
+            </div>
+          </div>
+          ${hasDelay?`<button class="btn-ghost" onclick="A.set('${tr.id}','trafficDelay',0);A.set('${tr.id}','rampDelay',0)">Clear</button>`:""}
+        </div>
+
+        <div class="seglist">
+          ${segs}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+            <select id="st-${tr.id}"><option value="drive">Driving</option><option value="other">Other work</option><option value="break">Extra break</option></select>
+            ${tr.crew?`<select id="sw-${tr.id}"><option value="1">D1</option><option value="2">D2</option></select>`:""}
+            <input id="sl-${tr.id}" placeholder="Label (To FC LEJ1)" style="flex:1;min-width:110px">
+            <input id="sh-${tr.id}" type="number" min="0" value="2" style="width:50px"><span style="color:var(--mut);font-size:12px">h</span>
+            <input id="sm-${tr.id}" type="number" min="0" max="59" value="0" style="width:50px"><span style="color:var(--mut);font-size:12px">m</span>
+            <button class="btn-primary" style="padding:7px 16px;font-size:13px" onclick="A.addSeg('${tr.id}')">Add</button>
+          </div>
+        </div>
+        ${wkLines.length?`<div class="warn mono" style="color:var(--mut);font-size:12px">${wkLines.join("<br>")}</div>`:""}
+        ${s.warnings.length||extra.length?`<div class="warn">${
+          s.warnings.map(w=>`<span style="color:${SC[s.status]}">⚠ ${esc(w)}</span>`).concat(
+          extra.map(e=>`<span style="color:${SC[e.level]}">⚠ WEEK · ${esc(e.msg)}</span>`)).join("<br>")}</div>`:""}
+      </div>`;
+    }
+
+    return `<div class="truck ${open?'open':''} ${hasDelay?'delayed':''}">
+      <div class="trow" onclick="A.toggle('${tr.id}')">
+        <span class="dotst" style="background:${SC[st]}"></span>
+        <span class="mono" style="font-size:14px;font-weight:600;width:84px">${esc(tr.name)}${tr.crew?' <span class="crewtag">2×</span>':''}${hasDelay?' <span style="color:var(--amber)">⚠</span>':''}</span>
+        <span style="font-size:13px;color:var(--mut);width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr.driver)||"—"}${tr.crew&&tr.driver2?" +"+esc(tr.driver2.split(" ")[0]):""}</span>
+        <div class="strip">${strip}</div>
+        <span class="mono" style="font-size:12px;color:var(--mut);width:112px;text-align:right">${s.events.length?fmtClock(s.start)+"→"+fmtClock(s.end):"no tour"}</span>
+        <span class="mono" title="${driveTitle}" style="font-size:12px;width:80px;text-align:right;color:${Math.max(s.d1,s.d2)>s.driveLimit?'var(--red)':'var(--text)'}">${driveTxt}/${fmtHM(s.driveLimit)}</span>
+        <span class="mono" style="font-size:11px;font-weight:600;width:82px;text-align:right;color:${SC[st]}">${slotTxt}</span>
+      </div>${editor}</div>`;
+  }).join("");
+}
+
+let drvAnalysisCache={};
+function renderDrivers(drv){
+  drvAnalysisCache=drv;
+  const wrap=document.getElementById("drivers");
+  const keys=Object.keys(drv).sort((a,b)=>drv[a].name.localeCompare(drv[b].name));
+  const mon=mondayOf(state.date);
+  if(!keys.length){wrap.innerHTML=`<div class="empty">No drivers yet — name drivers on the board and their weekly hours appear here.</div>`;return}
+  wrap.innerHTML=`<div class="sub" style="margin-bottom:12px">FIXED WEEK ${dayLabel(mon).dm}–${dayLabel(addDays(mon,6)).dm} (Mon–Sun, Reg 561/2006) · stats include only days present in this planner</div>`+
+  keys.map(k=>{
+    const r=drv[k];
+    const wk=r.weeks[mon]||{drive:0,ext:[]};
+    const prev=r.weeks[addDays(mon,-7)]||{drive:0,ext:[]};
+    const two=wk.drive+prev.drive;
+    const worst=r.issues.reduce((m,i)=>RANK[i.level]>RANK[m]?i.level:m,"ok");
+    const lastRest=[...r.rests].reverse().find(x=>x.t==="weekly"||x.t==="weekly-reduced");
+    const bar=(val,max,col)=>`<div class="bar"><div style="width:${Math.min(100,val/max*100)}%;background:${val>max?"var(--red)":col}"></div></div>`;
+    const days=[...Array(7)].map((_,i)=>{const d=addDays(mon,i);const dd=r.days[d];
+      return `<div class="daychip${d===state.date?" today":""}">${WD[i]} ${dayLabel(d).dm.slice(0,5)}<b>${dd?fmtHM(dd.drive):"—"}</b></div>`}).join("");
+    return `<div class="drvcard">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="dotst" style="background:${SC[worst]}"></span>
+        <span class="drvname">${esc(r.name)}</span>
+        <span class="sub">${r.dates.length} day${r.dates.length>1?"s":""} on board</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:11px;color:${SC[worst]}">${SL[worst]}</span>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+        <div class="stat"><div class="statlab">WEEK DRIVING</div><div class="statval">${fmtHM(wk.drive)} / 56h00</div>${bar(wk.drive,56*60,"var(--amber)")}</div>
+        <div class="stat"><div class="statlab">TWO WEEKS</div><div class="statval">${fmtHM(two)} / 90h00</div>${bar(two,90*60,"var(--amber)")}</div>
+        <div class="stat"><div class="statlab">10H DAYS USED</div><div class="statval" style="color:${wk.ext.length>2?"var(--red)":"var(--text)"}">${wk.ext.length} / 2</div></div>
+        <div class="stat"><div class="statlab">LAST WEEKLY REST</div><div class="statval" style="font-size:12px">${
+          lastRest?(lastRest.t==="weekly"?"regular ≥45h":"reduced "+fmtHM(lastRest.gap))+" ("+lastRest.lbl+")":"none in data"}</div></div>
+      </div>
+      ${r.comp.length?`<div class="warn" style="color:var(--amber)">${r.comp.map(c=>"⏳ rest compensation "+fmtHM(c.owe)+" due by "+dayLabel(c.due).dm+" (from "+c.lbl+")").join("<br>")}</div>`:""}
+      ${r.issues.length?`<div class="warn">${r.issues.map(i=>`<span style="color:${SC[i.level]}">⚠ ${esc(i.msg)}</span>`).join("<br>")}</div>`:""}
+      <div class="daychips">${days}</div>
+    </div>`}).join("");
+}
+
+load();render();
+</script>
+</body>
+</html>
