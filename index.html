@@ -151,7 +151,41 @@ function load(){
         state.days[todayStr()]={trucks};save()}}
   }catch(e){}
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify({version:2,days:state.days}))}catch(e){}}
+function save(){if(state.demo)return;try{localStorage.setItem(KEY,JSON.stringify({version:2,days:state.days}))}catch(e){}}
+
+// ---------- demo dataset (?demo URL flag — sample fleet, nothing saved) ----------
+function demoData(){
+  const T=todayStr();const days={};
+  const seg=(type,mins,label,who)=>({type,mins,label:label||"",who:who||1});
+  const truck=o=>({id:uid(),name:o.n,driver:o.d||"",driver2:o.d2||"",crew:!!o.d2,start:o.s,slot:o.sl||"",
+    extended:!!o.x,trafficDelay:o.td||0,rampDelay:o.rd||0,segments:o.g});
+  const wd=(dateFromStr(T).getDay()+6)%7;
+  const M=n=>addDays(T,-wd+n); // n=0 → this week's Monday; negative → previous week
+  // previous week Mon–Sat (Sunday off → weekly rest gap)
+  for(let i=0;i<6;i++){const list=[{n:"TRK-01",d:"Ivan Petrov",s:"05:30",g:[seg("drive",420,"Tour")]}];
+    if(i<5){list.push({n:"TRK-04",d:"Karl Weber",s:"05:00",g:[seg("drive",480,"Tour")]},
+            {n:"TRK-03",d:"Mihai Rusu",s:"06:00",g:[seg("drive",480,"Tour")]})}
+    days[M(i-7)]={trucks:list.map(truck)}}
+  // this week up to yesterday
+  const ivan=[600,540,600,540],karl=[600,600,480,510];
+  const mihai=[{m:540,s:"06:00"},{m:540,s:"06:00"},{m:570,s:"06:00"},{m:540,s:"11:00"}];
+  for(let i=0;i<wd&&i<4;i++){days[M(i)]={trucks:[
+    {n:"TRK-01",d:"Ivan Petrov",s:"05:30",x:ivan[i]>540,g:[seg("drive",ivan[i],"Tour")]},
+    {n:"TRK-04",d:"Karl Weber",s:"05:00",x:karl[i]>540,g:[seg("drive",karl[i],"Tour")]},
+    {n:"TRK-03",d:"Mihai Rusu",s:mihai[i].s,x:mihai[i].m>540,g:[seg("drive",mihai[i].m,"Tour")]}].map(truck)}}
+  // today's board
+  days[T]={trucks:[
+    {n:"TRK-01",d:"Ivan Petrov",s:"05:30",sl:"16:30",g:[seg("drive",270,"To FC DTM2"),seg("other",30,"Trailer swap DTM2"),seg("drive",225,"To FC CGN1")]},
+    {n:"TRK-02",d:"Ana Pop",d2:"Boris Ionescu",s:"06:00",sl:"20:00",g:[seg("drive",240,"To FC LEJ1"),seg("drive",240,"LEJ1 → POZ1",2),seg("other",45,"Trailer swap POZ1"),seg("drive",120,"Return leg")]},
+    {n:"TRK-03",d:"Mihai Rusu",s:"07:15",x:1,g:[seg("drive",300,"To FC WRO2"),seg("break",15,"Split part 1"),seg("drive",270,"Return via POZ1")]},
+    {n:"TRK-04",d:"Karl Weber",s:"04:45",sl:"12:10",td:40,g:[seg("drive",150,"To FC HAM2"),seg("other",40,"Trailer swap HAM2"),seg("drive",180,"To FC BER3")]},
+    {n:"TRK-05",d:"Piotr Nowak",s:"06:30",sl:"15:50",g:[seg("drive",270,"To FC POZ1"),seg("other",35,"Trailer swap"),seg("drive",195,"To FC SZZ1")]},
+    {n:"TRK-06",d:"Jonas Berg",s:"05:00",g:[seg("drive",330,"To FC DUS2"),seg("other",30,"Trailer swap"),seg("drive",240,"To FC FRA7")]},
+    {n:"TRK-07",d:"Luca Moretti",s:"08:00",sl:"19:00",rd:30,g:[seg("drive",240,"To FC MXP5"),seg("other",25,"Trailer swap"),seg("drive",210,"To FC BLQ1")]},
+    {n:"TRK-08",d:"Tomas Novak",s:"09:30",sl:"21:00",g:[seg("drive",255,"To FC KTW1"),seg("other",30,"Trailer swap"),seg("drive",150,"To FC PRG2")]}
+  ].map(truck)};
+  return days;
+}
 function curTrucks(){return(state.days[state.date]||{trucks:[]}).trucks}
 function ensureDay(){if(!state.days[state.date])state.days[state.date]={trucks:[]}}
 function prevDayWithData(){return Object.keys(state.days).filter(d=>d<state.date&&(state.days[d].trucks||[]).length).sort().pop()||null}
@@ -419,7 +453,7 @@ function render(){
   document.getElementById("datepick").value=state.date;
   const delayed=today.filter(x=>x.tr.trafficDelay>0||x.tr.rampDelay>0).length;
   document.getElementById("headinfo").textContent=
-    today.length+"/"+MAX_TRUCKS+" trucks · 561/2006 board"+(delayed?" · "+delayed+" delayed":"");
+    today.length+"/"+MAX_TRUCKS+" trucks · 561/2006 board"+(delayed?" · "+delayed+" delayed":"")+(state.demo?" · DEMO DATA (not saved)":"");
   document.getElementById("tab-board").className="viewtab"+(state.view==="board"?" on":"");
   document.getElementById("tab-drivers").className="viewtab"+(state.view==="drivers"?" on":"");
   document.getElementById("toolbar-extra").innerHTML=
@@ -596,7 +630,7 @@ let drvAnalysisCache={};
 function renderDrivers(drv){
   drvAnalysisCache=drv;
   const wrap=document.getElementById("drivers");
-  const keys=Object.keys(drv).sort((a,b)=>drv[a].name.localeCompare(drv[b].name));
+  const keys=Object.keys(drv).sort((a,b)=>drv[b].dates.length-drv[a].dates.length||drv[a].name.localeCompare(drv[b].name));
   const mon=mondayOf(state.date);
   if(!keys.length){wrap.innerHTML=`<div class="empty">No drivers yet — name drivers on the board and their weekly hours appear here.</div>`;return}
   wrap.innerHTML=`<div class="sub" style="margin-bottom:12px">FIXED WEEK ${dayLabel(mon).dm}–${dayLabel(addDays(mon,6)).dm} (Mon–Sun, Reg 561/2006) · stats include only days present in this planner</div>`+
@@ -631,7 +665,12 @@ function renderDrivers(drv){
     </div>`}).join("");
 }
 
-load();render();
+const Q=new URLSearchParams(location.search);
+if(Q.has("demo")){state.demo=true;state.days=demoData();
+  if(Q.get("view")==="drivers")state.view="drivers";
+  const o=Q.get("open");if(o){const t=curTrucks().find(t=>t.name===o);if(t)state.openId=t.id}}
+else load();
+render();
 
 // PWA: offline support when served over http(s); skipped for file:// use
 if("serviceWorker"in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
