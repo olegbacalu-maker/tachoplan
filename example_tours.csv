@@ -1,0 +1,5 @@
+truck;driver;driver2;crew;date;start;slot;extended;segments
+TRK-01;Ivan Petrov;;;;05:30;16:30;;drive:4h30:To FC DTM2|other:30:Trailer swap DTM2|drive:3h45:To FC CGN1
+TRK-02;Ana Pop;Boris Ionescu;1;;06:00;20:00;;drive:4h00:To FC LEJ1|drive2:4h00:LEJ1 to POZ1 (D2)|other:45:Trailer swap
+TRK-03;Mihai Rusu;;;;07:15;;1;drive:5h00:To FC WRO2|break:15:Split part 1|drive:4h30:Return leg
+TRK-04;Karl Weber;;;;04:45;14:00;;drive:2h30:To FC HAM2|other:40:Ramp + swap|drive:3h00:To FC BER3|other:30:Live unload

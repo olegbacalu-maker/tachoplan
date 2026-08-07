@@ -1,0 +1,15 @@
+{
+  "name": "TachoPlan Fleet",
+  "short_name": "TachoPlan",
+  "description": "EU 561/2006 fleet planning board — driving times, breaks, rests, Amazon slots",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101319",
+  "theme_color": "#101319",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
