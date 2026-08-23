@@ -395,7 +395,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.6</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.7</div>
   </div>
 </aside>
 <div class="main">
@@ -895,12 +895,25 @@ function splitLeg(sg,after,mid){
   if(km){first.km=Math.round(km*after/sg.mins);second.km=km-first.km}
   // Neither half is the route the map measured any more, so its figures go rather
   // than being carried onto two legs neither of them describes.
-  [first,second].forEach(h=>{delete h.mapMin;delete h.mapAt});
+  [first,second].forEach(h=>{delete h.mapMin;delete h.mapAt;delete h.autoMin});
   // The original label names where the leg was going and the second half still goes
   // there; the first half now ends at the new stop and is renamed for it, so one
   // run does not read as two to the same place.
   if(mid.label){first.label=/^to /i.test(mid.label)?mid.label:"To "+mid.label;first.to=mid.label}
   return[first,mid,second]}
+
+// What the tool reckons a driving leg takes. Two floors, and the slower wins: a
+// lorry is never quicker than the car Google routed, so on an open motorway its
+// own limit decides, and in a jam the map's figure already does. Replacing one
+// with the other outright would invent time back on a congested leg — the exact
+// flattery this board exists to prevent.
+// Either half may be missing: no measurement, or no fleet speed set.
+function planMin(sg,kmh){
+  const car=Math.max(0,Math.round(+sg.mapMin||0));
+  const km=+sg.km||0;
+  const bySpeed=(kmh>0&&km>0)?Math.round(km/kmh*60):0;
+  return Math.max(car,bySpeed);
+}
 
 // The chain of places the tour visits: the yard it leaves from, then wherever
 // each driving leg ends. A swap or an unload happens where the truck already is,
@@ -1076,8 +1089,8 @@ TRK-05;Piotr Nowak;;;TR-6633;Hannover, DE;${state.date};06:30;15:50;;;10:40:45;d
 const MAPKEY="tachoplan-maps-key", MAPOPT="tachoplan-maps-opts";
 function mapKey(){try{return localStorage.getItem(MAPKEY)||""}catch(e){return""}}
 function setMapKey(v){try{v?localStorage.setItem(MAPKEY,v):localStorage.removeItem(MAPKEY)}catch(e){}}
-function mapOpts(){try{return Object.assign({traffic:true,tolls:false},JSON.parse(localStorage.getItem(MAPOPT)||"{}"))}
-  catch(e){return{traffic:true,tolls:false}}}
+function mapOpts(){try{return Object.assign({traffic:true,tolls:false,kmh:0},JSON.parse(localStorage.getItem(MAPOPT)||"{}"))}
+  catch(e){return{traffic:true,tolls:false,kmh:0}}}
 function setMapOpt(k,v){const o=mapOpts();o[k]=v;try{localStorage.setItem(MAPOPT,JSON.stringify(o))}catch(e){}}
 
 // The request Google is asked, built from the tour alone so it can be checked
@@ -1123,19 +1136,23 @@ async function routeTruck(tr){
   const route=j&&j.routes&&j.routes[0];
   if(!route||!route.legs)throw new Error("Google found no route between these places \u2014 check the addresses.");
   if(route.legs.length!==legs.length)throw new Error("Google split the route into "+route.legs.length+" legs, the tour has "+legs.length+". Check for a repeated or empty place.");
-  // Google fills the time until a human disagrees with it. Once the dispatcher has
-  // overridden a leg, his figure stands and the map's is only shown beside it —
-  // re-measuring a tour must not quietly undo a correction somebody made on purpose.
+  // The tool fills the time until a human disagrees with it. Once the dispatcher
+  // has overridden a leg, his figure stands and the tool's is only shown beside it
+  // — re-measuring must not quietly undo a correction somebody made on purpose.
+  // The test is against autoMin, what was last written here, not against the map's
+  // own figure: otherwise changing the fleet speed would make every leg look
+  // hand-corrected and nothing would ever be filled in again.
+  const kmh=+mapOpts().kmh||0;
   let applied=0;
   route.legs.forEach((lg,i)=>{
     const g=legs[i];
-    const mins=Math.max(1,Math.round(parseFloat(lg.duration||"0")/60));
-    const untouched=!g.mapMin||g.mins===g.mapMin;
+    const untouched=!g.autoMin||g.mins===g.autoMin;
     g.km=Math.round((lg.distanceMeters||0)/1000);
-    g.mapMin=mins;g.mapAt=Date.now();
-    if(untouched){g.mins=mins;applied++}
+    g.mapMin=Math.max(1,Math.round(parseFloat(lg.duration||"0")/60));
+    g.mapAt=Date.now();
+    if(untouched){g.mins=g.autoMin=Math.max(1,planMin(g,kmh));applied++}
   });
-  return{legs:legs.length,applied,km:tourKm(tr)};
+  return{legs:legs.length,applied,km:tourKm(tr),kmh};
 }
 
 // ---------- icons (inline, so the app stays one file and works offline) ----------
@@ -1235,7 +1252,7 @@ const A={
     sg[field]=field==="meet"?String(val||"").trim().toUpperCase():val;
     // Retyping the destination invalidates whatever the map said about this leg.
     // A distance the dispatcher typed himself is his, and is left where it is.
-    if(field==="to"&&sg.mapAt){delete sg.km;delete sg.mapMin;delete sg.mapAt}
+    if(field==="to"&&sg.mapAt){delete sg.km;delete sg.mapMin;delete sg.mapAt;delete sg.autoMin}
     save();render()},
   // Opening the cut form for one leg closes any other: two open forms would share
   // the same field ids, and the second would read the first one's boxes.
@@ -1315,12 +1332,13 @@ const A={
     try{
       const r=await routeTruck(t);
       state.mapMsg={id,level:"info",text:r.legs+" leg"+(r.legs===1?"":"s")+" measured · "+r.km+" km"+
+        (r.kmh?" · timed at "+r.kmh+" km/h where that is slower":"")+
         (r.applied<r.legs?" · "+(r.legs-r.applied)+" kept the time you set":"")};
       save();
     }catch(e){state.mapMsg={id,level:"violation",text:e.message||String(e)}}
     state.mapBusy=null;render();},
   mapKey:v=>{setMapKey(String(v||"").trim());render()},
-  mapOpt:(k,v)=>{setMapOpt(k,!!v);render()},
+  mapOpt:(k,v)=>{setMapOpt(k,v);render()},
   mvSeg:(id,i,dir)=>{const t=curTrucks().find(t=>t.id===id);const j=i+dir;
     if(j<0||j>=t.segments.length)return;
     [t.segments[i],t.segments[j]]=[t.segments[j],t.segments[i]];state.splitAt=null;save();render()},
@@ -1636,7 +1654,19 @@ function splitForm(tr,i,sg){
   </div>`;
 }
 function editor(tr,s,extra){
-  const segs=tr.segments.map((sg,i)=>`<div class="sgr">
+  const KMH=+mapOpts().kmh||0;
+  const segs=tr.segments.map((sg,i)=>{
+    // What the tool makes of this leg, and why — shown only where it disagrees
+    // with the plan by more than a rounding minute.
+    const want=sg.type==="drive"?planMin(sg,KMH):0;
+    const off=want&&Math.abs(want-sg.mins)>2;
+    const why=[];
+    if(off){
+      if(sg.mapMin)why.push("Google measured "+fmtHM(sg.mapMin)+" for a car");
+      if(KMH>0&&sg.km)why.push(sg.km+" km at "+KMH+" km/h is "+fmtHM(Math.round(sg.km/KMH*60)));
+      why.push("the plan says "+fmtHM(sg.mins));
+    }
+    return `<div class="sgr">
       <span class="stag ${sg.type==="other"||sg.type==="swap"?"light":""}" style="background:${TCOL[sg.type]||TCOL.other}">${TLAB[sg.type]||"WORK"}</span>
       ${tr.crew&&sg.type==="drive"?`<button class="dchip d${sg.who===2?2:1}" title="Switch driver" onclick="A.segWho('${tr.id}',${i})">D${sg.who===2?2:1}</button>`:""}
       <input class="field sl" value="${esc(sg.label)}" placeholder="untitled" title="What this leg is" onchange="A.setSeg('${tr.id}',${i},'label',this.value)">
@@ -1645,7 +1675,7 @@ function editor(tr,s,extra){
       ${sg.type==="drive"?`
         <input class="field dest" value="${esc(sg.to||"")}" placeholder="drives to…" title="Where this leg ends — the address the distance is looked up against" onchange="A.setSeg('${tr.id}',${i},'to',this.value)">
         <input type="number" min="0" class="field kmin" value="${sg.km||""}" placeholder="km" title="Distance of this leg" onchange="A.setSeg('${tr.id}',${i},'km',Math.max(0,parseInt(this.value)||0))">
-        ${sg.mapMin&&Math.abs(sg.mapMin-sg.mins)>2?`<span class="kmv" style="color:var(--risk-t)" title="Google timed this leg at ${fmtHM(sg.mapMin)}; the plan says ${fmtHM(sg.mins)}">≠ ${fmtHM(sg.mapMin)}</span>`:""}`:""}
+        ${off?`<span class="kmv" style="color:var(--risk-t)" title="${esc(why.join("; ")+". A lorry is never quicker than the car, so the slower of the two stands.")}">≠ ${fmtHM(want)}</span>`:""}`:""}
       ${sg.type==="other"||sg.type==="swap"?`
         <input type="time" class="field slotin" value="${esc(sg.slot||"")}" title="Booked slot at this stop — leave empty if there is none" onchange="A.setStopSlot('${tr.id}',${i},this.value)">
         ${sg.arrived?`<button class="arrchip" title="Arrived ${esc(sg.arrived)} — click to clear" onclick="A.setStopArrived('${tr.id}',${i},'')">✓ ${esc(sg.arrived)}</button>`:""}`:""}
@@ -1654,7 +1684,7 @@ function editor(tr,s,extra){
       <button class="mini" title="Move up" onclick="A.mvSeg('${tr.id}',${i},-1)">${I.up}</button>
       <button class="mini" title="Move down" onclick="A.mvSeg('${tr.id}',${i},1)">${I.down}</button>
       <button class="mini del" title="Remove" onclick="A.rmSeg('${tr.id}',${i})">${I.x}</button>
-    </div>${state.splitAt===tr.id+":"+i?splitForm(tr,i,sg):""}`).join("");
+    </div>${state.splitAt===tr.id+":"+i?splitForm(tr,i,sg):""}`}).join("");
 
   const wk=[];
   for(const nm of[tr.driver,tr.crew?tr.driver2:""]){const k=drvKey(nm);if(!k)continue;
@@ -1833,7 +1863,13 @@ function renderMaps(){
       so a file handed to somebody else cannot carry it. Distances already measured stay on the board
       with no signal.<br>
       <b style="color:var(--text)">Google routes for cars.</b> Bridge heights, axle weights and lorry
-      bans are not in these numbers: a good first figure, not a route a 40-tonne vehicle is known to fit.
+      bans are not in these numbers: a good first figure, not a route a 40-tonne vehicle is known to fit.<br>
+      It also <b>times</b> for a car. Across the EU a lorry over 3.5 t is held to 80 km/h on the motorway
+      where a car runs 120–130, so the map's figure arrives too early — and a slot buffer that flatters
+      the plan is worse than none. Give the fleet's real average and every leg is timed at that instead.
+      A lorry is never quicker than the car, so where Google's own figure is the slower one — a city
+      leg, a jam — that figure stands and the speed is ignored. Leave the box empty to keep Google's
+      timing untouched.
     </div>
     <div class="improw" style="flex-wrap:wrap">
       <input class="field" id="mapkey" type="password" autocomplete="off" placeholder="Google Maps API key"
@@ -1841,6 +1877,11 @@ function renderMaps(){
       <span class="kmv" style="color:${k?"var(--ok-t)":"var(--text3)"}">${k?"key stored on this device":"no key yet"}</span>
       <label class="check ${o.traffic?"on":""}"><input type="checkbox" ${o.traffic?"checked":""} onchange="A.mapOpt('traffic',this.checked)">Live traffic</label>
       <label class="check ${o.tolls?"on":""}"><input type="checkbox" ${o.tolls?"checked":""} onchange="A.mapOpt('tolls',this.checked)">Avoid tolls</label>
+      <span style="font-size:12.5px;color:var(--text2)">Lorry speed</span>
+      <input class="field" type="number" min="0" max="130" value="${o.kmh||""}" placeholder="e.g. 70" style="width:88px"
+        title="Average a loaded lorry actually holds on your routes, door to door. Leave empty to use Google's own timing."
+        onchange="A.mapOpt('kmh',Math.max(0,Math.min(130,parseInt(this.value)||0)))">
+      <span style="font-size:12.5px;color:var(--text3)">km/h</span>
       <div style="flex:1"></div>
       ${k?`<button class="btn" onclick="A.mapKey('')">Forget key</button>`:""}
       <button class="btn" onclick="A.mapsToggle()">Close</button>

@@ -56,8 +56,9 @@ truck   {id, name, driver, driver2, crew, trailer, place, start, slot, extended,
 segment {type: drive|other|swap|break, mins, label, who}
         // other and swap may also carry slot and arrived — a stop of the tour
         // swap may also carry takes (trailer picked up) and meet (partner code)
-        // drive may also carry km, to (where the leg ends), and mapMin/mapAt
-        //   — what Google last said about it and when
+        // drive may also carry km, to (where the leg ends), mapMin/mapAt — what
+        //   Google last said about it and when — and autoMin, the figure the tool
+        //   itself last wrote into mins
 taken[] {at:"HH:MM", mins, open?}   // breaks the driver reported; open = still standing
 ```
 
@@ -96,21 +97,33 @@ fall earlier than the start. Harmonising them breaks one case or the other.
 **Open breaks grow with the clock only on today's board.** A past day
 re-simulates from the stored minutes, so history stays stable.
 
-**Google fills a leg's time only until a human disagrees.** A leg whose `mins`
-differ from its `mapMin` has been corrected on purpose, and re-measuring the tour
-leaves it alone and shows the map's figure beside it instead. Making the measure
+**The tool fills a leg's time only until a human disagrees.** A leg whose `mins`
+differ from its `autoMin` has been corrected on purpose, and re-measuring the tour
+leaves it alone and shows the tool's figure beside it instead. Making the measure
 authoritative would silently undo corrections a dispatcher made for a reason.
 
-**Retyping a leg's `to` throws away `km`, `mapMin` and `mapAt` — but only if the
-distance came from the map.** A distance typed by hand is the dispatcher's and
+**That test is against `autoMin`, not `mapMin`.** `mapMin` is what Google measured;
+`autoMin` is what was last written into `mins`, and the two differ whenever a fleet
+speed is set. Comparing against `mapMin` would make every leg look hand-corrected
+the moment the speed changed, and nothing would ever be filled in again.
+
+**`planMin` takes the slower of two floors, and that is the whole point.** Google
+times for a car, so on a motorway its figure arrives too early for a lorry held to
+80 km/h — but on a city leg or in a jam its figure is already the slower one, and
+km ÷ speed would hand back time that does not exist. Replacing rather than flooring
+would turn a fix for optimism into a new source of it.
+
+**Retyping a leg's `to` throws away `km`, `mapMin`, `mapAt` and `autoMin` — but
+only if the distance came from the map.** A distance typed by hand is the dispatcher's and
 survives; a measured one describes a route that no longer exists.
 
-**`splitLeg` divides km but drops `mapMin`/`mapAt`.** Neither half is the route
+**`splitLeg` divides km but drops `mapMin`/`mapAt`/`autoMin`.** Neither half is the route
 Google measured, so carrying its figures onto them would attach a verified-looking
 number to something nobody verified. The kilometres are split in proportion because
 an estimate is honestly an estimate; the timing is not.
 
-**The map key lives in its own `localStorage` entry, never in `state.days`.** That
+**The map key and the fleet's lorry speed live in their own `localStorage`
+entries, never in `state.days`.** That
 is what keeps it out of `backupAll()` and out of the CSV, both of which get handed
 to other people. Any refactor that moves it into the board data leaks it.
 
