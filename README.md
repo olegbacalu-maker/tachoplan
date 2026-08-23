@@ -22,6 +22,17 @@ Built by a professional truck driver moving into transport planning: the tool mo
 - Weekly rest: regular 45h / reduced 24h, with **compensation tracked** — how much is owed and the date it is due; two consecutive reduced weekly rests flagged (Art. 8(6)); overdue weekly rest after six 24h periods
 - A driver's weekly breach is raised on the board row of the truck they are on, so history cannot quietly sink tomorrow's tour
 
+**Live, during the shift**
+- The board keeps its own clock: the strip fills as the tour is driven, so the solid part is what the truck has actually done and the pale part is what is still ahead
+- ETA per truck against the booked slot, and a tile counting who arrives within the hour — plus who is already overdue
+- One tap marks a truck **arrived**; the actual time is kept next to the plan (`ARR 12:25 −0h15`), which is what an Amazon dispute needs later
+- Refreshes itself every 30 seconds, and never while a field is being edited
+
+**Trailer swaps**
+- Swap is its own segment type — other work for the regulation, a different thing for the fleet: the truck leaves with a different trailer
+- Each truck carries a trailer number and the board shows the chain, e.g. `TR-6633 → TR-9004`
+- Two trucks that share a **meet code** are partners at a meet point. The tool checks whether their swap windows actually overlap, and warns when they do not (`no overlap with TRK-05 — trailers cannot change hands`) or when one waits too long for the other
+
 **Working the board**
 - One time scale for the whole day: every truck drawn on the same clock with an hour ruler, slot pins and a now marker, so tours are comparable at a glance
 - KPI tiles (trucks, drivers, fleet driving time, tightest buffer, delays, tours to fix), status filters, search by truck or driver
@@ -51,13 +62,14 @@ Example: `index.html?demo&open=TRK-04&q=karl`
 ## CSV format
 
 ```
-truck;driver;driver2;crew;date;start;slot;extended;segments
-TRK-01;Ivan Petrov;;;2026-08-10;05:30;16:30;;drive:4h30:To FC DTM2|other:30:Trailer swap|drive:3h45:To FC CGN1
-TRK-02;Ana Pop;Boris Ionescu;1;;06:00;20:00;;drive:4h00:Leg A|drive2:4h00:Leg B (D2)|other:45:Swap
+truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
+TRK-05;Piotr Nowak;;;TR-6633;2026-08-10;06:30;14:40;;;drive:3h10:To meet point A2|swap:40:Meet A2 #TR-9004 @M1|drive:3h20:To FC SZZ1
+TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;drive:2h30:To meet point A2|swap:40:Meet A2 #TR-6633 @M1|drive:3h40:To FC PRG2
 ```
 
 - Columns in any order, case-insensitive; delimiter detected automatically (`;` `,` or TAB, so pasting from Excel works)
-- `segments` = `type:minutes:label|…` where type is `drive`, `drive2` (crew, second driver), `other`/`work`, `break`; minutes accept `300`, `5h00`, `5:30`
+- `segments` = `type:minutes:label|…` where type is `drive`, `drive2` (crew, second driver), `other`/`work`, `swap`, `break`; minutes accept `300`, `5h00`, `5:30`
+- A swap may carry `#TRAILER` (the trailer taken) and `@CODE` (the meet point shared with the partner truck): `swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1`
 - An empty `date` means the day currently open on the board
 
 ## Honest limits
