@@ -414,12 +414,14 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <button class="btn" id="themebtn" onclick="A.theme()" title="Light / dark" aria-label="Switch theme"></button>
     <button class="btn" id="impbtn" onclick="A.importToggle()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Import</button>
     <button class="btn" onclick="A.exportDay()" title="Save the open day as a CSV for Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 21V9M8 13l4-4 4 4M4 3h16"/></svg>Export</button>
+    <button class="btn" id="mapbtn" onclick="A.mapsToggle()" title="Distances and driving times from Google Maps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 21s6.5-6.1 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 14.9 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2.4"/></svg>Maps</button>
     <button class="btn" onclick="A.backup()" title="Save every planned day as one backup file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7"/><path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M2 7h20v5H2z"/></svg>Backup</button>
     <button class="btn primary" id="addbtn" onclick="A.add()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Truck</button>
   </header>
   <main class="content">
     <div id="tiles" class="tiles"></div>
     <div id="importbox"></div>
+    <div id="mapbox"></div>
     <div id="barrow" class="bar-row"></div>
     <div id="view"></div>
     <div class="note" id="note"></div>
@@ -1106,7 +1108,7 @@ function routeBody(tr,now,opts){
 }
 async function routeTruck(tr){
   const key=mapKey();
-  if(!key)throw new Error("No Google key yet \u2014 paste one into the panel under Import first.");
+  if(!key)throw new Error("No Google key yet \u2014 open Maps in the top bar and paste one in.");
   const{body,legs}=routeBody(tr,new Date(),mapOpts());
   let r,j;
   try{
@@ -1297,8 +1299,18 @@ const A={
     t.arrived=v||"";save();render()},
   rmSeg:(id,i)=>{const t=curTrucks().find(t=>t.id===id);t.segments.splice(i,1);state.splitAt=null;save();render()},
   // Nothing is asked of Google until this is pressed, and only for this one tour.
+  mapsToggle:()=>{state.mapsOpen=!state.mapsOpen;render()},
   route:async id=>{
     const t=curTrucks().find(t=>t.id===id);if(!t)return;
+    // With no key there is nothing to ask, so open the panel and put the caret in
+    // the field rather than telling the dispatcher where to go looking for it.
+    if(!mapKey()){
+      state.mapsOpen=true;
+      state.mapMsg={id,level:"violation",text:"No Google key yet — the Maps panel is open at the top of the board, paste one in there."};
+      render();
+      const el=document.getElementById("mapkey");
+      if(el){el.scrollIntoView({block:"center",behavior:"smooth"});el.focus()}
+      return}
     state.mapBusy=id;state.mapMsg=null;render();
     try{
       const r=await routeTruck(t);
@@ -1371,6 +1383,7 @@ function render(){
   tb.innerHTML=state.theme==="dark"?I.sun:I.moon;
   tb.setAttribute("aria-label",state.theme==="dark"?"Switch to light theme":"Switch to dark theme");
   document.getElementById("impbtn").className="btn"+(state.importOpen?" on":"");
+  document.getElementById("mapbtn").className="btn"+(state.mapsOpen?" on":"");
   document.getElementById("addbtn").disabled=rows.length>=MAX_TRUCKS;
 
   const drvCount=Object.keys(drv).length;
@@ -1380,6 +1393,7 @@ function render(){
 
   renderTiles(rows,drv);
   renderImport();
+  renderMaps();
   if(state.view==="board")renderBoard(rows);
   else{document.getElementById("barrow").innerHTML="";renderDrivers(drv)}
 
@@ -1801,6 +1815,42 @@ function renderDrivers(drv){
     </div>`}).join("")+`</div>`;
 }
 
+// The key belongs where somebody would look for it, which is not inside a panel
+// headed "Import tours". Its own button, its own drawer, opened straight from the
+// Measure button when there is no key yet.
+function renderMaps(){
+  const box=document.getElementById("mapbox");
+  if(!state.mapsOpen){box.innerHTML="";return}
+  const k=mapKey(), o=mapOpts();
+  box.innerHTML=`<div class="imp">
+    <div class="ehd" style="color:var(--brand-d)">Distances from Google Maps — optional</div>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.6;margin-bottom:11px">
+      With a key, the <b>Measure</b> button on a tour asks Google for the distance and driving time of
+      every leg at once. Without one, kilometres are simply typed into the <b>km</b> box on each leg
+      and everything else works exactly as before.<br>
+      Nothing leaves this device until you press Measure, and only that one tour's places go.
+      The key is kept on this device beside the board — it is never written into a CSV or a backup,
+      so a file handed to somebody else cannot carry it. Distances already measured stay on the board
+      with no signal.<br>
+      <b style="color:var(--text)">Google routes for cars.</b> Bridge heights, axle weights and lorry
+      bans are not in these numbers: a good first figure, not a route a 40-tonne vehicle is known to fit.
+    </div>
+    <div class="improw" style="flex-wrap:wrap">
+      <input class="field" id="mapkey" type="password" autocomplete="off" placeholder="Google Maps API key"
+        value="${esc(k)}" style="width:280px" onchange="A.mapKey(this.value)">
+      <span class="kmv" style="color:${k?"var(--ok-t)":"var(--text3)"}">${k?"key stored on this device":"no key yet"}</span>
+      <label class="check ${o.traffic?"on":""}"><input type="checkbox" ${o.traffic?"checked":""} onchange="A.mapOpt('traffic',this.checked)">Live traffic</label>
+      <label class="check ${o.tolls?"on":""}"><input type="checkbox" ${o.tolls?"checked":""} onchange="A.mapOpt('tolls',this.checked)">Avoid tolls</label>
+      <div style="flex:1"></div>
+      ${k?`<button class="btn" onclick="A.mapKey('')">Forget key</button>`:""}
+      <button class="btn" onclick="A.mapsToggle()">Close</button>
+    </div>
+    <div class="fmt">To measure a tour: fill <b>Starts from</b> on the truck and <b>drives to…</b> on every
+driving leg, then press <b>Measure</b> in the Segments card. Google fills each leg's distance and time.
+Correct a leg's minutes by hand afterwards and that figure stands — re-measuring shows the map's
+number beside it as ≠ rather than overwriting what you decided.</div>
+  </div>`;
+}
 function renderImport(){
   const box=document.getElementById("importbox");
   if(!state.importOpen){box.innerHTML="";return}
@@ -1825,21 +1875,6 @@ function renderImport(){
       <div style="flex:1"></div>
       <button class="btn" onclick="A.backup()">Download backup</button>
       <button class="btn" onclick="document.getElementById('bakfile').click()">Restore backup…</button>
-    </div>
-    <div class="improw" style="border-top:1px dashed var(--line);padding-top:11px;margin-top:12px;flex-wrap:wrap">
-      <div style="flex:1 1 100%;font-size:12.5px;color:var(--text2);line-height:1.55;margin-bottom:4px">
-        <b style="color:var(--text)">Distances from Google Maps</b> — optional. With a key, the
-        <b>Measure</b> button on a tour asks Google for the distance and driving time of every leg;
-        without one, kilometres are simply typed in. Nothing leaves this device until that button is
-        pressed, the key is kept beside the board and never goes into a CSV or a backup, and figures
-        already measured stay on the board when there is no signal.
-        Google routes for cars: bridges, axle weights and lorry bans are not in these numbers.
-      </div>
-      <input class="field" id="mapkey" type="password" autocomplete="off" placeholder="Google Maps API key"
-        value="${esc(mapKey())}" style="width:262px" onchange="A.mapKey(this.value)">
-      <label class="check ${mapOpts().traffic?"on":""}"><input type="checkbox" ${mapOpts().traffic?"checked":""} onchange="A.mapOpt('traffic',this.checked)">Live traffic</label>
-      <label class="check ${mapOpts().tolls?"on":""}"><input type="checkbox" ${mapOpts().tolls?"checked":""} onchange="A.mapOpt('tolls',this.checked)">Avoid tolls</label>
-      ${mapKey()?`<button class="btn" onclick="A.mapKey('')">Forget key</button>`:""}
     </div>
     ${rep?`<div class="warns">
       <div class="wl ${rep.restored||rep.added?"info":"violation"}">${rep.restored||rep.added?I.check:I.alert}<span>${
