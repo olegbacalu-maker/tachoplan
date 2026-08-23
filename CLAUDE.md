@@ -20,9 +20,17 @@ history behind it. Nothing in demo mode is ever saved — `save()` is a no-op
 while `state.demo` is set, so the sample can never overwrite a real board.
 
 There is no test suite. Changes to the engine are verified by running concrete
-scenarios in the browser console against `simulate()` and reading the numbers,
-not by eye. A change that cannot be demonstrated with times and totals has not
-been verified.
+scenarios against `simulate()` and reading the numbers, not by eye. A change that
+cannot be demonstrated with times and totals has not been verified.
+
+The browser console is one way. The other, when a change deserves a table of
+boundary cases, is to cut the script from `"use strict";` to the icons comment
+into a file, stub `localStorage`, append a `module.exports`, and run the scenarios
+under node — that slice is DOM-free on purpose, and keeping it that way is worth
+more than the few lines it costs. Pure helpers exist for this reason: `splitLeg`
+and `routeBody` hold the parts of the split and the map request that are worth
+checking without a browser or a key. Neither the harness nor its playwright
+dependency belongs in the repository.
 
 ## The engine
 
@@ -43,13 +51,19 @@ in the yard at once.
 Data shapes:
 
 ```js
-truck   {id, name, driver, driver2, crew, trailer, start, slot, extended,
+truck   {id, name, driver, driver2, crew, trailer, place, start, slot, extended,
          trafficDelay, rampDelay, arrived, taken[], segments[]}
 segment {type: drive|other|swap|break, mins, label, who}
         // other and swap may also carry slot and arrived — a stop of the tour
         // swap may also carry takes (trailer picked up) and meet (partner code)
+        // drive may also carry km, to (where the leg ends), and mapMin/mapAt
+        //   — what Google last said about it and when
 taken[] {at:"HH:MM", mins, open?}   // breaks the driver reported; open = still standing
 ```
+
+`place` and each drive leg's `to` are the chain the distances are measured along:
+the yard, then wherever each leg ends. A swap or an unload happens where the truck
+already is, so only driving legs name a place.
 
 ## Invariants that look like bugs
 
@@ -81,6 +95,24 @@ fall earlier than the start. Harmonising them breaks one case or the other.
 
 **Open breaks grow with the clock only on today's board.** A past day
 re-simulates from the stored minutes, so history stays stable.
+
+**Google fills a leg's time only until a human disagrees.** A leg whose `mins`
+differ from its `mapMin` has been corrected on purpose, and re-measuring the tour
+leaves it alone and shows the map's figure beside it instead. Making the measure
+authoritative would silently undo corrections a dispatcher made for a reason.
+
+**Retyping a leg's `to` throws away `km`, `mapMin` and `mapAt` — but only if the
+distance came from the map.** A distance typed by hand is the dispatcher's and
+survives; a measured one describes a route that no longer exists.
+
+**`splitLeg` divides km but drops `mapMin`/`mapAt`.** Neither half is the route
+Google measured, so carrying its figures onto them would attach a verified-looking
+number to something nobody verified. The kilometres are split in proportion because
+an estimate is honestly an estimate; the timing is not.
+
+**The map key lives in its own `localStorage` entry, never in `state.days`.** That
+is what keeps it out of `backupAll()` and out of the CSV, both of which get handed
+to other people. Any refactor that moves it into the board data leaks it.
 
 **Deleting the last truck of a day removes the date entirely**, and an absent
 day is a day off as far as rest analysis is concerned. That is load-bearing for
@@ -122,7 +154,15 @@ articles are worth naming; the JavaScript is not.
   old build from cache.
 - Keep the CSV documented in three places consistent with the exporter: the
   comment above the parser, the `EXAMPLE()` template, and the README.
-- Never add a build step, a dependency, a CDN link or an external font URL.
+- Never add a build step, a dependency, a CDN link or an external font URL. The
+  Google distance lookup is the one outbound call, and it stays within that rule
+  on purpose: Routes API v2 is served with CORS headers, so it is a plain `fetch`
+  with no script tag and no library. The legacy Distance Matrix endpoint sends no
+  such headers and is refused by the browser — reaching for it, or for the Maps
+  JavaScript API to get around that, would put a CDN script in the page.
+- Nothing may go to the network on its own. The dispatcher presses Measure, for
+  one tour, or nothing leaves the device. A board opened in a yard with no signal
+  must show every distance already measured and behave exactly as it did before.
 - Never relicense. The all-rights-reserved terms are deliberate, and
   `fonts/OFL.txt` must stay with the font it covers.
 - Never commit files kept outside the repository for privacy. `.gitignore`
