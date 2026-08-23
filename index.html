@@ -798,7 +798,8 @@ function analyzeMeets(rows){
   const by={};
   rows.forEach(r=>r.sim.events.forEach(e=>{
     if(!(e.type==="swap"&&e.meet))return;
-    const list=by[e.meet]=by[e.meet]||[];
+    const code=String(e.meet).toUpperCase();   // a backup may hold it in any case
+    const list=by[code]=by[code]||[];
     // A reported break can cut a swap in two; both halves are the same truck
     // standing in the same yard, so they describe one window, not two arrivals.
     const same=list.find(p=>p.id===r.tr.id);
@@ -835,9 +836,7 @@ function meetIssues(tr,meets){
 function runningBreakIndex(tr){
   if(state.date!==todayStr())return -1;
   const now=new Date();
-  return (tr.taken||[]).findIndex(b=>{const st=parseTime(b.at,state.date);
-    if(b.open)return now>=st;                       // still standing until told otherwise
-    return now>=st&&now<new Date(st.getTime()+(+b.mins||45)*MIN)});
+  return (tr.taken||[]).findIndex(b=>b.open&&now>=parseTime(b.at,state.date));
 }
 // A tour is walked point by point: each place it stands, then the end of the tour.
 // The dispatcher ticks them off one call at a time, so the board has to know which
@@ -864,7 +863,7 @@ function trailerChain(tr,s){
 
 // ---------- CSV import / export ----------
 // Columns (any order, case-insensitive):
-//   truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
+//   truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;breaks;segments
 // segments = "type:minutes:label|type:minutes:label|…"
 //   type: drive · drive2 (crew D2) · other/work · swap · break
 //   a swap may carry "#TRAILER" (the trailer taken) and "@CODE" (meet point), and any
@@ -988,10 +987,10 @@ function exportDayCSV(){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download="tachoplan_"+state.date+".csv";a.click();URL.revokeObjectURL(a.href)}
-const EXAMPLE=()=>`truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
-TRK-01;Ivan Petrov;;;TR-4471;${state.date};05:30;16:30;;;drive:4h30:To FC DTM2|swap:30:Trailer swap DTM2 #TR-8890|drive:3h45:To FC CGN1
-TRK-02;Ana Pop;Boris Ionescu;1;TR-2210;${state.date};06:00;20:00;;;drive:4h00:Leg A|drive2:4h00:Leg B (D2)|other:45:Ramp
-TRK-05;Piotr Nowak;;;TR-6633;${state.date};06:30;15:50;;;drive:3h10:To meet point|swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1|drive:3h20:Back to base`;
+const EXAMPLE=()=>`truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;breaks;segments
+TRK-01;Ivan Petrov;;;TR-4471;${state.date};05:30;16:30;;;;drive:4h30:To FC DTM2|swap:30:Trailer swap DTM2 #TR-8890 !10:15|drive:3h45:To FC CGN1
+TRK-02;Ana Pop;Boris Ionescu;1;TR-2210;${state.date};06:00;20:00;;;;drive:4h00:Leg A|drive2:4h00:Leg B (D2)|other:45:Ramp
+TRK-05;Piotr Nowak;;;TR-6633;${state.date};06:30;15:50;;;10:40:45;drive:3h10:To meet point|swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1|drive:3h20:Back to base`;
 
 // ---------- icons (inline, so the app stays one file and works offline) ----------
 const svg=(d,extra)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"${extra||""}>${d}</svg>`;
@@ -1095,7 +1094,7 @@ const A={
   breakNow:(id,ev)=>{if(ev)ev.stopPropagation();
     const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.taken=t.taken||[];
-    const i=(t.taken||[]).findIndex(b=>b.open);
+    const i=runningBreakIndex(t);
     if(i>=0){
       const stood=Math.round((new Date()-parseTime(t.taken[i].at,state.date))/MIN);
       if(stood<1)t.taken.splice(i,1);
@@ -1400,8 +1399,8 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         liveTxt?`<span class="live ${liveCls}">${liveTxt}</span>`
               :`<small>${s.events.length?fmtClock(s.start)+"→"+fmtClock(s.end):"—"}</small>`}</div>
       <div class="acts">
-        <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow
-          ?(stood!==null?"Standing "+fmtHM(stood)+(stood<45?" — needs "+fmtHM(45-stood)+" more for a legal break":" — legal since "+fmtClock(new Date(Date.now()-(stood-45)*MIN)))+" · click when he rolls again":"Reported break — click to undo")
+        <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow&&stood!==null
+          ?"Standing "+fmtHM(stood)+(stood<45?" — needs "+fmtHM(45-stood)+" more for a legal break":" — legal since "+fmtClock(new Date(Date.now()-(stood-45)*MIN)))+" · click when he rolls again"
           :"Driver has stopped — click again when he rolls"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
         <button class="arrbtn ${tourDone?"on":""}" title="${nextStop
           ?"Driver reports arrival at "+esc(nextStop.label)+(nextStop.slot?" (slot "+nextStop.slot+")":"")

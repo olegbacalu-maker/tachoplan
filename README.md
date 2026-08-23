@@ -76,7 +76,8 @@ TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;;drive:2h30:To meet point A2|swap:40
 - Columns in any order, case-insensitive; delimiter detected automatically (`;` `,` or TAB, so pasting from Excel works)
 - `segments` = `type:minutes:label|…` where type is `drive`, `drive2` (crew, second driver), `other`/`work`, `swap`, `break`; minutes accept `300`, `5h00`, `5:30`
 - A swap may carry `#TRAILER` (the trailer taken) and `@CODE` (the meet point shared with the partner truck): `swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1`
-- `breaks` carries the breaks actually taken, as `clock:minutes` pairs: `11:15:45|15:40:30`
+- Any stop — a swap or other work — may carry `!HH:MM` (its own booked slot) and `=HH:MM` (when the driver reached it): `other:35:Unload BBB !12:30 =12:41`
+- `breaks` carries the breaks actually taken as `clock:minutes` pairs, a trailing `+` meaning the driver is still standing there: `11:15:45|15:40:30+`
 - Only `truck` and `segments` are required; `work` is accepted as an alias of `other`, `rest` of `break`, and `drive1` of `drive`
 - An empty `date` means the day currently open on the board
 
