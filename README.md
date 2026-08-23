@@ -41,6 +41,8 @@ Built by a professional truck driver moving into transport planning: the tool mo
 - A **backup file** carries every planned day at once, for moving between devices or keeping a copy ([example CSV](example_tours.csv) ships with the repo)
 - Light and dark themes; installable as a PWA and runs offline
 
+**[Open the live board](https://olegbacalu-maker.github.io/tachoplan/?demo)** — a sample fleet of eight trucks with a week of driver history behind it. Nothing is saved; your own board starts empty.
+
 ## Run it
 
 No build, no dependencies.

@@ -863,6 +863,12 @@ const A={
   copyPrev:()=>{const src=prevDayWithData();if(!src)return;ensureDay();
     state.days[state.date].trucks=state.days[src].trucks.map(t=>({...JSON.parse(JSON.stringify(t)),id:uid(),trafficDelay:0,rampDelay:0}));
     save();render()},
+  // Someone arriving from a CV link with the query string stripped would otherwise
+  // meet an empty board and no way in. Only offered when the device holds no data
+  // at all, so a real board can never be replaced by the sample.
+  demo:()=>{state.demo=true;state.days=demoData();state.date=todayStr();state.openId=null;
+    try{history.replaceState(null,"","?demo")}catch(e){}
+    render()},
   add:()=>{ensureDay();const list=curTrucks();if(list.length>=MAX_TRUCKS)return;
     const t=newTruck(nextTruckNo(list));list.push(t);state.openId=t.id;state.view="board";save();render()},
   dup:id=>{const list=curTrucks();if(list.length>=MAX_TRUCKS)return;const s=list.find(t=>t.id===id);
@@ -1053,7 +1059,9 @@ function renderBoard(rows){
       <div class="es">Add a truck, copy yesterday's board, or import a CSV export from the TMS.</div>
       <div class="eb"><button class="btn primary" onclick="A.add()">${I.truck}Add truck</button>
       ${prev?`<button class="btn" onclick="A.copyPrev()">${I.copy}Copy board from ${dayLabel(prev).dm}</button>`:""}
-      <button class="btn" onclick="A.importToggle()">Import CSV</button></div></div>`;return}
+      <button class="btn" onclick="A.importToggle()">Import CSV</button>
+      ${!state.demo&&!Object.keys(state.days).some(d=>(state.days[d].trucks||[]).length)
+        ?`<button class="btn" onclick="A.demo()">See a sample fleet</button>`:""}</div></div>`;return}
 
   const q=state.q;
   // A dispatcher searches for whatever they have in hand: a truck number, a driver
