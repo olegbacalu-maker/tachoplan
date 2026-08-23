@@ -26,6 +26,7 @@ Built by a professional truck driver moving into transport planning: the tool mo
 - The board keeps its own clock: the strip fills as the tour is driven, so the solid part is what the truck has actually done and the pale part is what is still ahead
 - ETA per truck against the booked slot, and a tile counting who arrives within the hour — plus who is already overdue
 - One tap marks a truck **arrived**; the actual time is kept next to the plan (`ARR 12:25 −0h15`), which is what an Amazon dispute needs later
+- **Breaks the driver actually took.** The 4h30 rule sets the latest moment for a break, not the exact one, and drivers routinely stop earlier. One tap stamps the real time, the break cuts the plan where it happened and resets the counter there, and the row counts the rest of it down (`BREAK 0h22`). The tool then answers the question that follows: an early stop is legal, but if the stretch still to drive now passes 4h30 it forces a second break, and the warning says so with the exact cost
 - Refreshes itself every 30 seconds, and never while a field is being edited
 
 **Trailer swaps**
@@ -67,14 +68,15 @@ Example: `index.html?demo&open=TRK-04&q=karl`
 ## CSV format
 
 ```
-truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
-TRK-05;Piotr Nowak;;;TR-6633;2026-08-10;06:30;14:40;;;drive:3h10:To meet point A2|swap:40:Meet A2 #TR-9004 @M1|drive:3h20:To FC SZZ1
-TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;drive:2h30:To meet point A2|swap:40:Meet A2 #TR-6633 @M1|drive:3h40:To FC PRG2
+truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;breaks;segments
+TRK-05;Piotr Nowak;;;TR-6633;2026-08-10;06:30;14:40;;;10:40:45;drive:3h10:To meet point A2|swap:40:Meet A2 #TR-9004 @M1|drive:3h20:To FC SZZ1
+TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;;drive:2h30:To meet point A2|swap:40:Meet A2 #TR-6633 @M1|drive:3h40:To FC PRG2
 ```
 
 - Columns in any order, case-insensitive; delimiter detected automatically (`;` `,` or TAB, so pasting from Excel works)
 - `segments` = `type:minutes:label|…` where type is `drive`, `drive2` (crew, second driver), `other`/`work`, `swap`, `break`; minutes accept `300`, `5h00`, `5:30`
 - A swap may carry `#TRAILER` (the trailer taken) and `@CODE` (the meet point shared with the partner truck): `swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1`
+- `breaks` carries the breaks actually taken, as `clock:minutes` pairs: `11:15:45|15:40:30`
 - Only `truck` and `segments` are required; `work` is accepted as an alias of `other`, `rest` of `break`, and `drive1` of `drive`
 - An empty `date` means the day currently open on the board
 

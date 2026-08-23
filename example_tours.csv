@@ -1,6 +1,6 @@
-truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
-TRK-01;Ivan Petrov;;;TR-4471;;05:30;16:30;;;drive:4h30:To FC DTM2|swap:30:Drop & hook DTM2 #TR-8890|drive:3h45:To FC CGN1
-TRK-02;Ana Pop;Boris Ionescu;1;TR-2210;;06:00;20:00;;;drive:4h00:To FC LEJ1|drive2:4h00:LEJ1 to POZ1 (D2)|swap:45:Drop & hook POZ1 #TR-3115
-TRK-03;Mihai Rusu;;;TR-7702;;07:15;;1;;drive:5h00:To FC WRO2|break:15:Split part 1|drive:4h30:Return leg
-TRK-05;Piotr Nowak;;;TR-6633;;06:30;14:40;;;drive:3h10:To meet point A2|swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1|drive:3h20:To FC SZZ1
-TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;drive:2h30:To meet point A2|swap:40:Meet A2 Bad Oeynhausen #TR-6633 @M1|drive:3h40:To FC PRG2
+truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;breaks;segments
+TRK-01;Ivan Petrov;;;TR-4471;;05:30;16:30;;;;drive:4h30:To FC DTM2|swap:30:Drop & hook DTM2 #TR-8890|drive:3h45:To FC CGN1
+TRK-02;Ana Pop;Boris Ionescu;1;TR-2210;;06:00;20:00;;;;drive:4h00:To FC LEJ1|drive2:4h00:LEJ1 to POZ1 (D2)|swap:45:Drop & hook POZ1 #TR-3115
+TRK-03;Mihai Rusu;;;TR-7702;;07:15;;1;;;drive:5h00:To FC WRO2|break:15:Split part 1|drive:4h30:Return leg
+TRK-05;Piotr Nowak;;;TR-6633;;06:30;14:40;;;10:40:45;drive:3h10:To meet point A2|swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1|drive:3h20:To FC SZZ1
+TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;;drive:2h30:To meet point A2|swap:40:Meet A2 Bad Oeynhausen #TR-6633 @M1|drive:3h40:To FC PRG2
