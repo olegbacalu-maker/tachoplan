@@ -1087,6 +1087,10 @@ if(Q.has("demo")){state.demo=true;state.days=demoData();
   const o=Q.get("open");if(o){const t=curTrucks().find(t=>t.name===o);if(t)state.openId=t.id}}
 else load();
 if(Q.get("theme")==="dark"||Q.get("theme")==="light"){state.theme=Q.get("theme");applyTheme()}
+// ?q= makes a filtered board shareable: a link can open straight on one truck
+// or one driver, which is how the tool gets shown in a demo.
+if(Q.get("q")){state.q=Q.get("q").trim().toLowerCase();
+  const el=document.getElementById("q");if(el)el.value=Q.get("q")}
 render();
 
 // PWA: offline support when served over http(s); skipped for file:// use
