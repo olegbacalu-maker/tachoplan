@@ -208,7 +208,8 @@ input[type=date].field,input[type=time].field{color-scheme:light}
 .badge{font-size:9.5px;font-weight:700;letter-spacing:.4px;border-radius:5px;padding:0 5px;
   border:1px solid currentColor;line-height:1.6}
 .badge.crew{color:var(--work)}
-.badge.delay{color:var(--risk-t)}
+.badge.traffic{color:var(--risk-t)}
+.badge.ramp{color:var(--work)}
 .drv{font-size:12.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .drv i{font-style:normal;color:var(--text3)}
 .hrs{font-size:12.5px;text-align:right;font-weight:600}
@@ -1277,7 +1278,8 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}" title="${tr.arrived?"Arrived":SL[st]}"></span><span class="vh">${tr.arrived?"Arrived":SL[st]}</span>
         <b>${esc(tr.name)}</b>
         ${tr.crew?`<span class="badge crew">2×</span>`:""}
-        ${hasDelay&&!tr.arrived?`<span class="badge delay">DELAY</span>`:""}
+        ${!tr.arrived&&tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours">TRAFFIC</span>`:""}
+        ${!tr.arrived&&tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, it shifts the arrival but not the driving hours">RAMP</span>`:""}
         ${swapEvents.length?`<span class="badge meet" title="${esc(meetTitle)}">MEET</span>`:""}
       </div>
       <div class="drv">${esc(tr.driver)||"<i>no driver</i>"}${tr.crew&&tr.driver2?" + "+esc(tr.driver2.split(" ")[0]):""}

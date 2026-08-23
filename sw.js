@@ -2,7 +2,7 @@
    Navigations: network-first (app updates arrive as soon as you're online),
    falling back to cache offline. Static assets: cache-first. */
 "use strict";
-const CACHE = "tachoplan-v3.3.2";
+const CACHE = "tachoplan-v3.3.3";
 const PRECACHE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png",
   "./fonts/inter-latin.woff2", "./fonts/inter-latin-ext.woff2",
   "./fonts/inter-cyrillic.woff2", "./fonts/inter-cyrillic-ext.woff2"];

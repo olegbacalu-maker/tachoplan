@@ -12,7 +12,7 @@ Built by a professional truck driver moving into transport planning: the tool mo
 - 45-minute break inserted automatically after each 4h30 of accumulated driving (Art. 7); the **15 + 30 split** is recognised — after a 15-minute first part only the missing 30 is added
 - Daily driving 9h / 10h extended (Art. 6); shift-span checks 13h / 15h tied to the daily rest that follows
 - Slot feasibility: arrival against the booked Amazon slot with a live buffer; under 20 minutes flags RISK
-- Live disruption per truck: **traffic delay** counts as driving — it burns hours and can force another break — while a **ramp queue** counts as other work and only shifts arrival. Both are added to the end of the planned tour rather than inserted at the point they happened: the totals, the limits and the arrival time come out right, the strip shows them as a tail
+- Live disruption per truck, labelled on the row for what it is — `TRAFFIC` in amber, `RAMP` in blue, because the two are not the same thing: **traffic delay** counts as driving — it burns hours and can force another break — while a **ramp queue** counts as other work and only shifts arrival. Both are added to the end of the planned tour rather than inserted at the point they happened: the totals, the limits and the arrival time come out right, the strip shows them as a tail
 - **Multi-manning**: per-leg driver assignment, 45 minutes as passenger in a moving vehicle counted as a break, 21h crew span inside the 30h window
 
 **Per driver (weekly rules)**
