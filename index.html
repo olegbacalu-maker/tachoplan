@@ -76,8 +76,12 @@ button{cursor:pointer}
 /* ---------- sidebar ---------- */
 .side{width:220px;flex:0 0 220px;background:var(--side);color:var(--on-side);
   display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-.brand{display:flex;align-items:center;gap:10px;padding:18px 16px 16px;
+.brand{display:flex;align-items:center;gap:10px;padding:18px 16px 16px;margin:0;font-size:inherit;font-weight:inherit;
   box-shadow:inset 0 -1px 0 rgba(255,255,255,.09)}
+/* Present to a screen reader, invisible on screen — used to name controls that
+   carry only an icon, and to give the page a real heading. */
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 .brand .mark{width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:var(--drive);
   color:#25190A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;letter-spacing:-.5px}
 .brand .nm{font-size:15px;font-weight:700;letter-spacing:.2px;line-height:1.15}
@@ -360,10 +364,10 @@ input[type=date].field,input[type=time].field{color-scheme:light}
 </head>
 <body>
 <aside class="side">
-  <div class="brand">
-    <div class="mark">TP</div>
-    <div class="nm">TachoPlan<small>FLEET</small></div>
-  </div>
+  <h1 class="brand">
+    <span class="mark" aria-hidden="true">TP</span>
+    <span class="nm">TachoPlan<small>FLEET</small></span>
+  </h1>
   <nav class="snav" id="snav"></nav>
   <div class="legend">
     <div class="lt">TACHOGRAPH</div>
@@ -371,7 +375,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.1</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.2</div>
   </div>
 </aside>
 <div class="main">
@@ -384,11 +388,13 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <input type="date" class="field" id="datepick" onchange="A.gotoDate(this.value)">
     <button class="btn" onclick="A.gotoToday()">Today</button>
     <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input class="field" id="q" placeholder="Truck, driver, trailer…" oninput="A.search(this.value)"></label>
+      <span class="vh">Search the board</span>
+      <input class="field" id="q" placeholder="Truck, driver, trailer…" aria-label="Search by truck, driver, trailer or meet code" oninput="A.search(this.value)"></label>
     <div style="flex:1"></div>
-    <button class="btn" id="themebtn" onclick="A.theme()" title="Light / dark"></button>
+    <button class="btn" id="themebtn" onclick="A.theme()" title="Light / dark" aria-label="Switch theme"></button>
     <button class="btn" id="impbtn" onclick="A.importToggle()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Import</button>
-    <button class="btn" onclick="A.exportDay()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 21V9M8 13l4-4 4 4M4 3h16"/></svg>Export</button>
+    <button class="btn" onclick="A.exportDay()" title="Save the open day as a CSV for Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 21V9M8 13l4-4 4 4M4 3h16"/></svg>Export</button>
+    <button class="btn" onclick="A.backup()" title="Save every planned day as one backup file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7"/><path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M2 7h20v5H2z"/></svg>Backup</button>
     <button class="btn primary" id="addbtn" onclick="A.add()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Truck</button>
   </header>
   <main class="content">
@@ -427,6 +433,14 @@ function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36
 function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function drvKey(name){return(name||"").trim().replace(/\s+/g," ").toLowerCase()}
 
+// Numbering from the list length collides after a delete: remove TRK-02 of three
+// and the next truck is named TRK-03, which is already on the board. Take the
+// highest number actually in use instead.
+function nextTruckNo(list){
+  let max=0;
+  for(const t of list){const m=/(\d+)\s*$/.exec(t.name||"");if(m)max=Math.max(max,+m[1])}
+  return max+1;
+}
 function newTruck(n){return{id:uid(),name:"TRK-"+pad2(n),driver:"",driver2:"",crew:false,trailer:"",start:"06:00",slot:"",extended:false,trafficDelay:0,rampDelay:0,arrived:"",segments:[]}}
 
 // ---------- storage & migration ----------
@@ -752,6 +766,29 @@ function applyImport(rows,mode){
         start:r.start,slot:r.slot,extended:r.extended,arrived:r.arrived,
         trafficDelay:0,rampDelay:0,segments:r.segments});added++}}
   save();return{added,skipped,dates:Object.keys(byDate).sort()}}
+// The CSV export carries a single day, which is right for handing a board to
+// someone else but wrong as a backup: everything lives in one browser, and the
+// weekly analysis reads every day at once. So the whole state travels as one file.
+function backupAll(){
+  const blob=JSON.stringify({app:"tachoplan",version:2,savedAt:new Date().toISOString(),days:state.days});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([blob],{type:"application/json"}));
+  a.download="tachoplan-backup-"+todayStr()+".json";a.click();URL.revokeObjectURL(a.href);
+}
+function restoreAll(text){
+  let p;try{p=JSON.parse(text)}catch(e){return{ok:false,msg:"not a valid backup file"}}
+  if(!p||typeof p!=="object"||!p.days||typeof p.days!=="object")return{ok:false,msg:"this file has no board data in it"};
+  const dates=Object.keys(p.days).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+  if(!dates.length)return{ok:false,msg:"the backup contains no dated boards"};
+  const trucks=dates.reduce((n,d)=>n+((p.days[d]&&p.days[d].trucks)||[]).length,0);
+  if(!confirm("Restore "+trucks+" trucks across "+dates.length+" day(s)?\n\nThis replaces everything currently on this device."))
+    return{ok:false,msg:"restore cancelled"};
+  state.days={};dates.forEach(d=>{state.days[d]={trucks:(p.days[d].trucks||[])}});
+  state.openId=null;state.demo=false;save();
+  if(!state.days[state.date])state.date=dates.sort()[dates.length-1];
+  return{ok:true,msg:trucks+" trucks restored across "+dates.length+" day(s)",dates};
+}
+
 function csvField(v){v=String(v==null?"":v);return/[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function exportDayCSV(){
   const rows=curTrucks().map(t=>[t.name,t.driver,t.driver2,t.crew?1:0,t.trailer||"",state.date,t.start,t.slot,
@@ -797,7 +834,14 @@ const A={
   importExample:()=>{const ta=document.getElementById("csvtext");if(ta)ta.value=EXAMPLE()},
   importFile:input=>{const f=input.files&&input.files[0];if(!f)return;
     const rd=new FileReader();rd.onload=()=>{document.getElementById("csvtext").value=rd.result;A.importRun()};rd.readAsText(f)},
+  restorePick:input=>{const f=input.files&&input.files[0];if(!f)return;
+    const rd=new FileReader();rd.onload=()=>{const r=restoreAll(String(rd.result));
+      state.importReport={errors:r.ok?[]:[r.msg],added:0,skipped:0,dates:r.dates||[],restored:r.ok?r.msg:""};
+      render()};rd.readAsText(f)},
   importRun:()=>{const ta=document.getElementById("csvtext");if(!ta||!ta.value.trim())return;
+    if(ta.value.trim()[0]==="{"){const r=restoreAll(ta.value);
+      state.importReport={errors:r.ok?[]:[r.msg],added:0,skipped:0,dates:r.dates||[],restored:r.ok?r.msg:""};
+      render();return}
     const mode=document.querySelector('input[name="impmode"]:checked').value;
     const{rows,errors}=parseCSV(ta.value);
     const res=rows.length?applyImport(rows,mode):{added:0,skipped:0,dates:[]};
@@ -805,6 +849,7 @@ const A={
     if(res.dates.length&&!res.dates.includes(state.date))state.date=res.dates[0];
     render()},
   exportDay:()=>exportDayCSV(),
+  backup:()=>backupAll(),
   search:v=>{state.q=v.trim().toLowerCase();render()},
   theme:()=>{state.theme=state.theme==="dark"?"light":"dark";
     try{localStorage.setItem("tachoplan-theme",state.theme)}catch(e){}
@@ -819,9 +864,9 @@ const A={
     state.days[state.date].trucks=state.days[src].trucks.map(t=>({...JSON.parse(JSON.stringify(t)),id:uid(),trafficDelay:0,rampDelay:0}));
     save();render()},
   add:()=>{ensureDay();const list=curTrucks();if(list.length>=MAX_TRUCKS)return;
-    const t=newTruck(list.length+1);list.push(t);state.openId=t.id;state.view="board";save();render()},
+    const t=newTruck(nextTruckNo(list));list.push(t);state.openId=t.id;state.view="board";save();render()},
   dup:id=>{const list=curTrucks();if(list.length>=MAX_TRUCKS)return;const s=list.find(t=>t.id===id);
-    list.push({...JSON.parse(JSON.stringify(s)),id:uid(),name:"TRK-"+pad2(list.length+1)});save();render()},
+    list.push({...JSON.parse(JSON.stringify(s)),id:uid(),name:"TRK-"+pad2(nextTruckNo(list)),arrived:""});save();render()},
   del:id=>{ensureDay();state.days[state.date].trucks=curTrucks().filter(t=>t.id!==id);
     if(state.openId===id)state.openId=null;pruneEmptyDays();save();render()},
   reset:()=>{if(confirm("Clear the board for "+state.date+"? This deletes its trucks."))
@@ -909,7 +954,11 @@ function render(){
   document.getElementById("dlab").innerHTML=
     `<span class="${isToday?"today":""}">${dl.wd.toUpperCase()}${isToday?" · TODAY":""}</span><b>${dl.dm}</b>`;
   document.getElementById("datepick").value=state.date;
-  document.getElementById("themebtn").innerHTML=state.theme==="dark"?I.sun:I.moon;
+  const tb=document.getElementById("themebtn");
+  // The icon is written on every render, so the accessible name has to be an
+  // attribute — a hidden label inside the button would be wiped each time.
+  tb.innerHTML=state.theme==="dark"?I.sun:I.moon;
+  tb.setAttribute("aria-label",state.theme==="dark"?"Switch to light theme":"Switch to dark theme");
   document.getElementById("impbtn").className="btn"+(state.importOpen?" on":"");
   document.getElementById("addbtn").disabled=rows.length>=MAX_TRUCKS;
 
@@ -1077,7 +1126,7 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
   return `<div class="trow ${open?"open":""} ${tr.arrived?"done":""}">
     <div class="thead grid5" onclick="A.toggle('${tr.id}')">
       <div class="tname">
-        <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}"></span>
+        <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}" title="${tr.arrived?"Arrived":SL[st]}"></span><span class="vh">${tr.arrived?"Arrived":SL[st]}</span>
         <b>${esc(tr.name)}</b>
         ${tr.crew?`<span class="badge crew">2×</span>`:""}
         ${hasDelay&&!tr.arrived?`<span class="badge delay">DELAY</span>`:""}
@@ -1245,6 +1294,7 @@ function renderImport(){
     <textarea id="csvtext" placeholder="Paste rows here, or choose a file below…"></textarea>
     <div class="improw">
       <input type="file" id="csvfile" accept=".csv,.txt,.tsv" style="display:none" onchange="A.importFile(this)">
+      <input type="file" id="bakfile" accept=".json" style="display:none" onchange="A.restorePick(this)">
       <button class="btn" onclick="document.getElementById('csvfile').click()">Choose file…</button>
       <label class="radio"><input type="radio" name="impmode" value="replace" checked>Replace day</label>
       <label class="radio"><input type="radio" name="impmode" value="append">Add to day</label>
@@ -1252,16 +1302,25 @@ function renderImport(){
       <button class="btn" onclick="A.importExample()">Load example</button>
       <button class="btn primary" onclick="A.importRun()">Import</button>
     </div>
+    <div class="improw" style="border-top:1px dashed var(--line);padding-top:11px;margin-top:12px">
+      <span style="font-size:12.5px;color:var(--text2)">A CSV holds one day. To move or keep <b>everything</b>, use a backup file:</span>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="A.backup()">Download backup</button>
+      <button class="btn" onclick="document.getElementById('bakfile').click()">Restore backup…</button>
+    </div>
     ${rep?`<div class="warns">
-      <div class="wl ${rep.added?"info":"violation"}">${rep.added?I.check:I.alert}<span>${
-        rep.added} truck${rep.added===1?"":"s"} imported${rep.dates.length?" → "+rep.dates.join(", "):""}${
-        rep.skipped?" · "+rep.skipped+" skipped (60 per day cap)":""}</span></div>
+      <div class="wl ${rep.restored||rep.added?"info":"violation"}">${rep.restored||rep.added?I.check:I.alert}<span>${
+        rep.restored?esc(rep.restored):
+        rep.added+" truck"+(rep.added===1?"":"s")+" imported"+(rep.dates.length?" → "+rep.dates.join(", "):"")+
+        (rep.skipped?" · "+rep.skipped+" skipped (60 per day cap)":"")}</span></div>
       ${rep.errors.slice(0,6).map(e=>`<div class="wl violation">${I.alert}<span>${esc(e)}</span></div>`).join("")}
       ${rep.errors.length>6?`<div class="wl violation">${I.alert}<span>…${rep.errors.length-6} more</span></div>`:""}
     </div>`:""}
-    <div class="fmt">truck ; driver ; driver2 ; crew ; date ; start ; slot ; extended ; segments
-segments = type:minutes:label | type:minutes:label | …    type: drive · drive2 (crew) · other · break
+    <div class="fmt">truck ; driver ; driver2 ; crew ; trailer ; date ; start ; slot ; extended ; arrived ; segments
+segments = type:minutes:label | …    type: drive · drive2 (crew) · other · swap · break
+a swap label may carry #TRAILER (the trailer taken) and @CODE (meet point), e.g. swap:40:Meet A2 #TR-9004 @M1
 minutes: 300 or 5h00 or 5:30    date: YYYY-MM-DD, empty = the open day    crew / extended: 1 or empty
+Only truck and segments are required; columns may be in any order.
 Delimiter detected automatically (; , or TAB) — pasting from Excel works.</div>
   </div>`;
   if(keep&&!rep)document.getElementById("csvtext").value=keep;
@@ -1272,10 +1331,11 @@ Delimiter detected automatically (; , or TAB) — pasting from Excel works.</div
 try{const t=localStorage.getItem("tachoplan-theme");if(t)state.theme=t}catch(e){}
 applyTheme();
 const Q=new URLSearchParams(location.search);
-if(Q.has("demo")){state.demo=true;state.days=demoData();
-  if(Q.get("view")==="drivers")state.view="drivers";
-  const o=Q.get("open");if(o){const t=curTrucks().find(t=>t.name===o);if(t)state.openId=t.id}}
+if(Q.has("demo")){state.demo=true;state.days=demoData()}
 else load();
+if(Q.get("view")==="drivers")state.view="drivers";
+const openName=Q.get("open");
+if(openName){const t=curTrucks().find(t=>t.name===openName);if(t)state.openId=t.id}
 if(Q.get("theme")==="dark"||Q.get("theme")==="light"){state.theme=Q.get("theme");applyTheme()}
 // ?q= makes a filtered board shareable: a link can open straight on one truck
 // or one driver, which is how the tool gets shown in a demo.
@@ -1289,8 +1349,11 @@ render();
 // Typing is never interrupted: a re-render mid-edit would drop the caret.
 function liveTick(){
   if(state.date!==todayStr()||state.view!=="board")return false;
+  // Re-rendering replaces the DOM, so anything the user is currently working
+  // with — a field being typed into, a button about to be pressed — would lose
+  // focus mid-action. Wait for the next tick instead.
   const ae=document.activeElement;
-  if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return false;
+  if(ae&&/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(ae.tagName))return false;
   render();return true;
 }
 setInterval(liveTick,30000);

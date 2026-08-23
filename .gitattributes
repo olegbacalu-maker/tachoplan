@@ -1,0 +1,9 @@
+# Text files are stored with LF in the repository and checked out natively,
+# so a Windows working tree does not turn every file into a whole-file diff.
+* text=auto eol=lf
+
+# Binary assets must never be touched by line-ending conversion.
+*.woff2 binary
+*.png    binary
+*.ico    binary
+*.pdf    binary

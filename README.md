@@ -12,7 +12,7 @@ Built by a professional truck driver moving into transport planning: the tool mo
 - 45-minute break inserted automatically after each 4h30 of accumulated driving (Art. 7); the **15 + 30 split** is recognised — after a 15-minute first part only the missing 30 is added
 - Daily driving 9h / 10h extended (Art. 6); shift-span checks 13h / 15h tied to the daily rest that follows
 - Slot feasibility: arrival against the booked Amazon slot with a live buffer; under 20 minutes flags RISK
-- Live disruption per truck: **traffic delay** counts as driving — it burns hours and can force another break — while a **ramp queue** counts as other work and only shifts arrival
+- Live disruption per truck: **traffic delay** counts as driving — it burns hours and can force another break — while a **ramp queue** counts as other work and only shifts arrival. Both are added to the end of the planned tour rather than inserted at the point they happened: the totals, the limits and the arrival time come out right, the strip shows them as a tail
 - **Multi-manning**: per-leg driver assignment, 45 minutes as passenger in a moving vehicle counted as a break, 21h crew span inside the 30h window
 
 **Per driver (weekly rules)**
@@ -30,22 +30,25 @@ Built by a professional truck driver moving into transport planning: the tool mo
 
 **Trailer swaps**
 - Swap is its own segment type — other work for the regulation, a different thing for the fleet: the truck leaves with a different trailer
-- Each truck carries a trailer number and the board shows the chain, e.g. `TR-6633 → TR-9004`
+- Each truck carries a trailer number and the row shows where it starts and ends, e.g. `TR-6633 → TR-9004`; every individual swap is listed inside the truck's editor
 - Two trucks that share a **meet code** are partners at a meet point. The tool checks whether their swap windows actually overlap, and warns when they do not (`no overlap with TRK-05 — trailers cannot change hands`) or when one waits too long for the other
 
 **Working the board**
 - One time scale for the whole day: every truck drawn on the same clock with an hour ruler, slot pins and a now marker, so tours are comparable at a glance
-- KPI tiles (trucks, drivers, fleet driving time, tightest buffer, delays, tours to fix), status filters, search by truck or driver
-- Day-by-day boards with date navigation and one-click copy of the previous day
-- CSV import — a file or a straight paste out of Excel — and Excel-friendly CSV export
+- KPI tiles — trucks, tightest slot buffer, delays and tours to fix, joined on the current day by "arriving within 1h" and "arrived" — status filters, and search across truck, driver, trailer number, leg label and meet code
+- Day-by-day boards with date navigation and one-click copy of the most recent day that has trucks on it
+- CSV import — a file or a straight paste out of Excel — and Excel-friendly CSV export of the open day
+- A **backup file** carries every planned day at once, for moving between devices or keeping a copy ([example CSV](example_tours.csv) ships with the repo)
 - Light and dark themes; installable as a PWA and runs offline
 
 ## Run it
 
 No build, no dependencies.
 
-- **Local:** open `index.html` in any browser. Data is stored in that browser (localStorage).
-- **Deploy:** drop the whole folder onto [Netlify](https://app.netlify.com/drop) or enable GitHub Pages. Any static host works — keep `fonts/` next to `index.html`.
+- **Local:** open `index.html` in any browser. Data is stored in that browser (localStorage); `tachoplan.ico` is there for a desktop shortcut on Windows.
+- **Deploy:** enable GitHub Pages on this repository (Settings → Pages → deploy from `main`, folder `/`), or upload the files to any static host. Everything is path-relative, so serving from a subfolder works.
+
+> If you host it by uploading a folder rather than from git, upload only the files in this repository. A drag-and-drop host takes the folder as it is on disk and ignores `.gitignore`, so anything else you keep alongside it would be published too.
 
 ### URL parameters
 
@@ -70,12 +73,23 @@ TRK-08;Tomas Novak;;;TR-9004;;07:00;17:30;;;drive:2h30:To meet point A2|swap:40:
 - Columns in any order, case-insensitive; delimiter detected automatically (`;` `,` or TAB, so pasting from Excel works)
 - `segments` = `type:minutes:label|…` where type is `drive`, `drive2` (crew, second driver), `other`/`work`, `swap`, `break`; minutes accept `300`, `5h00`, `5:30`
 - A swap may carry `#TRAILER` (the trailer taken) and `@CODE` (the meet point shared with the partner truck): `swap:40:Meet A2 Bad Oeynhausen #TR-9004 @M1`
+- Only `truck` and `segments` are required; `work` is accepted as an alias of `other`, `rest` of `break`, and `drive1` of `drive`
 - An empty `date` means the day currently open on the board
 
 ## Honest limits
 
+Not affiliated with, endorsed by or connected to Amazon in any way; "Amazon" appears here only to describe the kind of delivery slots and disputes the board is used with.
+
 A planning aid, not a legal record. Ferry and train derogations, out-of-scope driving and Art. 12 exceptional circumstances are not modelled; weekly figures only count the days present in the planner. The final authority is always the tachograph.
+
+## Licence
+
+Copyright (c) 2026 Oleg Bacalu. Published to be read and evaluated, not to be
+reused — see [LICENSE](LICENSE). The bundled Inter typeface is licensed
+separately under the SIL Open Font License 1.1 (`fonts/OFL.txt`).
 
 ## Tech
 
-Vanilla JavaScript, no dependencies, no server — the fleet's data never leaves the device. Inter is bundled locally (variable woff2, one `@font-face` per unicode subset) so the board renders identically offline. Design tokens keep two colour systems apart: blue is interface chrome, while amber/green/red carry tachograph meaning.
+Vanilla JavaScript, no dependencies, no server — the fleet's data never leaves the device. Inter is bundled locally (variable woff2, one `@font-face` per unicode subset) so the board renders identically offline. Design tokens keep two colour systems apart. One is interface chrome — a single brand blue for buttons, links and focus. The other is meaning, and it is never reused for chrome: on the strip amber is driving, steel blue other work, violet a trailer swap, green a break; for a tour green is legal, amber risk, red violation. That separation is why the primary button is not amber: on this board amber already means "at risk".
+
+The Russian user guide for day-to-day operation is in [ИНСТРУКЦИЯ.md](ИНСТРУКЦИЯ.md).
