@@ -379,7 +379,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.3</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.4</div>
   </div>
 </aside>
 <div class="main">
@@ -506,7 +506,7 @@ function demoData(){
   // hour the demo is opened; another stopped early, which costs it a second break.
   const live=days[T].trucks.find(t=>{if(t.arrived)return false;const s=simulate(t,T);
     return s.events.length&&now>=s.start&&now<s.end});
-  if(live)live.taken=[{at:fmtClock(new Date(now.getTime()-22*MIN)),mins:45}];
+  if(live)live.taken=[{at:fmtClock(new Date(now.getTime()-52*MIN)),mins:45,open:true}];
   const early=days[T].trucks.find(t=>t.name==="TRK-03");
   if(early&&early!==live)early.taken=[{at:"11:15",mins:45}];
   return days;
@@ -548,7 +548,14 @@ function simulate(tr,dateStr){
   const reported=(tr.taken||[]).filter(b=>b&&b.at&&+b.mins>0)
     .map(b=>{let at=parseTime(b.at,dateStr);
       if(start-at>12*60*MIN)at=new Date(at.getTime()+24*60*MIN);
-      return{at,mins:Math.max(1,Math.round(+b.mins))}})
+      let mins=Math.max(1,Math.round(+b.mins));
+      // While the driver is still standing, 45 minutes is only the minimum he owes —
+      // the real break is however long he has been there, and the tour has to be
+      // built on that, not on the assumption that he left on the dot.
+      if(b.open&&dateStr===todayStr()){
+        const stood=(Date.now()-at)/MIN;
+        if(stood>mins)mins=Math.round(stood)}
+      return{at,mins,open:!!b.open}})
     .sort((a,b)=>a.at-b.at);
   let ri=0,art7=false,earlyStop=false;
   const pending=()=>ri<reported.length;
@@ -579,8 +586,10 @@ function simulate(tr,dateStr){
     if(!atEnd&&drove<270&&b.mins>=15)earlyStop=true;
     if(drove>270){art7=true;
       warnings.push("drove "+fmtHM(drove)+" straight before the break reported at "+fmtClock(b.at)+" — over the 4h30 limit (Art. 7)")}
-    push("break","Break "+b.mins+"m (reported)",b.mins);
+    push("break","Break "+b.mins+"m ("+(b.open?"standing":"reported")+")",b.mins);
     events[events.length-1].reported=true;
+    events[events.length-1].open=!!b.open;
+    if(b.open&&b.mins>=180)warnings.push("break has been open for "+fmtHM(b.mins)+" — tap again when the driver rolls, or correct the time");
     totalBreak+=b.mins;restAll(b.mins);
     if(b.mins<15)warnings.push("reported break "+b.mins+"m is under the 15-minute minimum — it does not count towards the 4h30");
   };
@@ -797,7 +806,14 @@ function runningBreakIndex(tr){
   if(state.date!==todayStr())return -1;
   const now=new Date();
   return (tr.taken||[]).findIndex(b=>{const st=parseTime(b.at,state.date);
+    if(b.open)return now>=st;                       // still standing until told otherwise
     return now>=st&&now<new Date(st.getTime()+(+b.mins||45)*MIN)});
+}
+// How long the driver has actually been standing, for an open break.
+function stoodFor(tr){
+  const i=runningBreakIndex(tr);if(i<0)return null;
+  const b=tr.taken[i];if(!b.open)return null;
+  return Math.max(0,(new Date()-parseTime(b.at,state.date))/MIN);
 }
 function trailerChain(tr,s){
   const chain=[tr.trailer||""];
@@ -863,9 +879,9 @@ function parseCSV(text){
     if(slot&&!/^\d{1,2}:\d{2}$/.test(slot)){errors.push("line "+ln+": bad slot '"+slot+"'");continue}
     const taken=[];
     for(const part of g("breaks").split("|").map(x=>x.trim()).filter(Boolean)){
-      const m=/^(\d{1,2}:\d{2}):(\d+)$/.exec(part);
+      const m=/^(\d{1,2}:\d{2}):(\d+)(\+?)$/.exec(part);
       if(!m){errors.push("line "+ln+": bad break '"+part+"', expected HH:MM:minutes");continue}
-      taken.push({at:m[1],mins:+m[2]})}
+      taken.push({at:m[1],mins:+m[2],open:m[3]==="+"})}
     const arrived=g("arrived");
     if(arrived&&!/^\d{1,2}:\d{2}$/.test(arrived)){errors.push("line "+ln+": bad arrived time '"+arrived+"'");continue}
     rows.push({name:g("truck")||"TRK",driver:g("driver"),driver2:g("driver2"),crew:boolVal(g("crew"))||!!g("driver2"),
@@ -911,7 +927,7 @@ function restoreAll(text){
 function csvField(v){v=String(v==null?"":v);return/[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function exportDayCSV(){
   const rows=curTrucks().map(t=>[t.name,t.driver,t.driver2,t.crew?1:0,t.trailer||"",state.date,t.start,t.slot,
-    t.extended?1:0,t.arrived||"",(t.taken||[]).map(b=>b.at+":"+b.mins).join("|"),
+    t.extended?1:0,t.arrived||"",(t.taken||[]).map(b=>b.at+":"+b.mins+(b.open?"+":"")).join("|"),
     t.segments.map(s=>{
       const type=(s.type==="drive"&&s.who===2)?"drive2":s.type;
       let lab=String(s.label||"").replace(/\|/g,"/");
@@ -1023,12 +1039,18 @@ const A={
   // time is kept next to the plan, which is what an Amazon dispute later needs.
   // The driver calls "I am taking my break now". One tap stamps the real time —
   // tapping again while that break is still running takes it back, for a mis-click.
-  breakNow:(id,ev,mins)=>{if(ev)ev.stopPropagation();
+  // First tap: the driver has stopped, and the break stays OPEN — its length is
+  // whatever he actually stands there. Second tap: he is rolling again, so the real
+  // duration is written down. Tapping straight back removes a mis-click.
+  breakNow:(id,ev)=>{if(ev)ev.stopPropagation();
     const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.taken=t.taken||[];
-    const running=runningBreakIndex(t);
-    if(running>=0&&!mins)t.taken.splice(running,1);
-    else t.taken.push({at:fmtClock(new Date()),mins:mins||45});
+    const i=(t.taken||[]).findIndex(b=>b.open);
+    if(i>=0){
+      const stood=Math.round((new Date()-parseTime(t.taken[i].at,state.date))/MIN);
+      if(stood<1)t.taken.splice(i,1);
+      else{t.taken[i].mins=stood;t.taken[i].open=false}
+    }else t.taken.push({at:fmtClock(new Date()),mins:45,open:true});
     save();render()},
   addBreak:(id,mins)=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.taken=t.taken||[];t.taken.push({at:fmtClock(new Date()),mins:mins||45});save();render()},
@@ -1232,6 +1254,7 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
   const hasDelay=tr.trafficDelay>0||tr.rampDelay>0;
   const live=now?liveOf(tr,s,now):{phase:"none"};
   const onBreakNow=runningBreakIndex(tr)>=0;
+  const stood=stoodFor(tr);
   const tourSpan=Math.max((s.end-s.start)/MIN,1);
   // A leg cut in two by an inserted break stays ONE leg to the planner, so the
   // label is printed on its first part only — otherwise the strip reads as two
@@ -1267,6 +1290,10 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
   if(live.phase==="arrived"){const early=live.delta>=0;liveCls=early?"arr":"late";
     liveTxt="ARR "+tr.arrived+(Math.abs(live.delta)>=1?(early?" +":" −")+fmtHM(Math.abs(live.delta)):"")}
   else if(live.phase==="before")liveCls="wait",liveTxt="in "+fmtHM(live.inMin);
+  else if(stood!==null)
+    // Counting up, because the question during an open break is how long he has
+    // been there. Amber until the 45 minutes are served, green once he may roll.
+    liveCls=stood>=45?"brk":"run",liveTxt="STOOD "+fmtHM(stood);
   else if(live.phase==="running"&&live.onBreak)liveCls="brk",
     liveTxt=(live.reported?"BREAK ":"break ")+fmtHM(live.breakLeft);
   else if(live.phase==="running")liveCls=live.etaMin<=60?"soon":"run",liveTxt="ETA "+fmtHM(live.etaMin);
@@ -1278,8 +1305,8 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}" title="${tr.arrived?"Arrived":SL[st]}"></span><span class="vh">${tr.arrived?"Arrived":SL[st]}</span>
         <b>${esc(tr.name)}</b>
         ${tr.crew?`<span class="badge crew">2×</span>`:""}
-        ${!tr.arrived&&tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours">TRAFFIC</span>`:""}
-        ${!tr.arrived&&tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, it shifts the arrival but not the driving hours">RAMP</span>`:""}
+        ${tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours">TRAFFIC</span>`:""}
+        ${tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, it shifts the arrival but not the driving hours">RAMP</span>`:""}
         ${swapEvents.length?`<span class="badge meet" title="${esc(meetTitle)}">MEET</span>`:""}
       </div>
       <div class="drv">${esc(tr.driver)||"<i>no driver</i>"}${tr.crew&&tr.driver2?" + "+esc(tr.driver2.split(" ")[0]):""}
@@ -1291,7 +1318,9 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         liveTxt?`<span class="live ${liveCls}">${liveTxt}</span>`
               :`<small>${s.events.length?fmtClock(s.start)+"→"+fmtClock(s.end):"—"}</small>`}</div>
       <div class="acts">
-        <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow?"On a reported break — click to undo":"Driver is taking a break now (45 min)"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
+        <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow
+          ?(stood!==null?"Standing "+fmtHM(stood)+(stood<45?" — needs "+fmtHM(45-stood)+" more for a legal break":" — legal since "+fmtClock(new Date(Date.now()-(stood-45)*MIN)))+" · click when he rolls again":"Reported break — click to undo")
+          :"Driver has stopped — click again when he rolls"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
         <button class="arrbtn ${tr.arrived?"on":""}" title="${tr.arrived?"Arrived "+tr.arrived+" — click to undo":"Mark as arrived"}" onclick="A.arrive('${tr.id}',event)">${I.check}</button>
       </div>
     </div>
@@ -1368,19 +1397,27 @@ function editor(tr,s,extra){
 
     <div class="ecard">
       <div class="ehd">Breaks the driver actually took</div>
-      ${(tr.taken||[]).length?(tr.taken||[]).map((b,i)=>`<div class="sgr">
-          <span class="stag light" style="background:var(--brk)">TAKEN</span>
+      ${(tr.taken||[]).length?(tr.taken||[]).map((b,i)=>{
+        const open=!!b.open;
+        const st=open&&state.date===todayStr()?Math.max(0,(new Date()-parseTime(b.at,state.date))/MIN):null;
+        return `<div class="sgr">
+          <span class="stag light" style="background:${open?"var(--risk)":"var(--brk)"}">${open?"OPEN":"TAKEN"}</span>
           <input type="time" class="field" style="width:104px;height:30px" value="${esc(b.at)}" onchange="A.setBreak('${tr.id}',${i},'at',this.value)">
-          <input type="number" class="field" style="width:64px;height:30px" min="1" value="${+b.mins||45}" onchange="A.setBreak('${tr.id}',${i},'mins',this.value)">
-          <span class="u" style="font-size:11.5px;color:var(--text3)">min</span>
-          <span class="sl"></span>
+          ${open
+            ?`<span style="font-size:12.5px;color:var(--text2)">standing <b>${st===null?"—":fmtHM(st)}</b>${st!==null&&st<45?" · "+fmtHM(45-st)+" short of a legal break":""}</span>
+              <span class="sl"></span>
+              <button class="qb" onclick="A.breakNow('${tr.id}')">Driver is rolling</button>`
+            :`<input type="number" class="field" style="width:64px;height:30px" min="1" value="${+b.mins||45}" onchange="A.setBreak('${tr.id}',${i},'mins',this.value)">
+              <span class="u" style="font-size:11.5px;color:var(--text3)">min</span>
+              <span class="sl"></span>`}
           <button class="mini del" title="Remove" onclick="A.rmBreak('${tr.id}',${i})">${I.x}</button>
-        </div>`).join(""):`<div style="font-size:12.5px;color:var(--text3);padding:2px 0 4px">Nothing reported yet — the plan uses the automatic 45 minutes after each 4h30.</div>`}
+        </div>`}).join(""):`<div style="font-size:12.5px;color:var(--text3);padding:2px 0 4px">Nothing reported yet — the plan uses the automatic 45 minutes after each 4h30.</div>`}
       <div class="addrow">
-        <span style="font-size:12.5px;color:var(--text2)">Driver says he is stopping now:</span>
-        <button class="qb" onclick="A.addBreak('${tr.id}',15)">+15 min</button>
-        <button class="qb" onclick="A.addBreak('${tr.id}',30)">+30 min</button>
-        <button class="btn primary sm" onclick="A.addBreak('${tr.id}',45)">Break now · 45 min</button>
+        <span style="font-size:12.5px;color:var(--text2)">Log a stop that is already over:</span>
+        <button class="qb" onclick="A.addBreak('${tr.id}',15)">15 min</button>
+        <button class="qb" onclick="A.addBreak('${tr.id}',30)">30 min</button>
+        <button class="qb" onclick="A.addBreak('${tr.id}',45)">45 min</button>
+        <button class="btn primary sm" onclick="A.breakNow('${tr.id}')">Driver is stopping now</button>
       </div>
     </div>
 
@@ -1490,7 +1527,7 @@ function renderImport(){
     <div class="fmt">truck ; driver ; driver2 ; crew ; trailer ; date ; start ; slot ; extended ; arrived ; breaks ; segments
 segments = type:minutes:label | …    type: drive · drive2 (crew) · other · swap · break
 a swap label may carry #TRAILER (the trailer taken) and @CODE (meet point), e.g. swap:40:Meet A2 #TR-9004 @M1
-breaks = breaks the driver actually took, as clock:minutes — 11:15:45|15:40:30
+breaks = breaks the driver actually took, as clock:minutes — 11:15:45|15:40:30 (a trailing + means still standing)
 minutes: 300 or 5h00 or 5:30    date: YYYY-MM-DD, empty = the open day    crew / extended: 1 or empty
 Only truck and segments are required; columns may be in any order.
 Delimiter detected automatically (; , or TAB) — pasting from Excel works.</div>
