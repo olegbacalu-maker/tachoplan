@@ -186,6 +186,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
 .trow.done .thead{opacity:.62}
 .badge.arr{color:var(--ok-t)}
 .badge.meet{color:var(--swap)}
+.badge.stops{color:var(--text3)}
 .swapline{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);
   background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:4px 8px;margin-top:6px}
 .swapline b{color:var(--text);font-weight:650}
@@ -274,6 +275,9 @@ input[type=date].field,input[type=time].field{color-scheme:light}
   border-radius:5px;padding:2px 0;color:#241A05}
 .stag.light{color:#fff}
 .takes{font-size:11.5px;color:var(--swap);font-weight:650;white-space:nowrap}
+.slotin{width:96px;height:28px;padding:2px 6px;font-size:12px}
+.arrchip{font-size:11px;font-weight:700;color:var(--ok-t);background:var(--ok-soft);
+  border:1px solid var(--ok);border-radius:5px;padding:1px 6px;white-space:nowrap}
 .sgr .sl{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sgr .sm{font-size:12px;color:var(--text2);font-weight:600}
 .mini{background:transparent;border:none;color:var(--text3);padding:3px 4px;border-radius:6px;line-height:0}
@@ -379,7 +383,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.4</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.5</div>
   </div>
 </aside>
 <div class="main">
@@ -488,10 +492,12 @@ function demoData(){
   // TRK-05 and TRK-08 are a meet pair: they drive towards each other, exchange
   // trailers at the same yard (code M1) and both turn back inside their hours.
   days[T]={trucks:[
-    {n:"TRK-01",d:"Ivan Petrov",tl:"TR-4471",s:"05:30",sl:"16:30",g:[seg("drive",270,"To FC DTM2"),swap(30,"Drop & hook DTM2","TR-8890"),seg("drive",225,"To FC CGN1")]},
+    {n:"TRK-01",d:"Ivan Petrov",tl:"TR-4471",s:"05:30",sl:"16:30",g:[seg("drive",270,"To FC DTM2"),
+      Object.assign(swap(30,"Drop & hook DTM2","TR-8890"),{slot:"10:15"}),seg("drive",225,"To FC CGN1")]},
     {n:"TRK-02",d:"Ana Pop",d2:"Boris Ionescu",tl:"TR-2210",s:"06:00",sl:"20:00",g:[seg("drive",240,"To FC LEJ1"),seg("drive",240,"LEJ1 → POZ1",2),swap(45,"Drop & hook POZ1","TR-3115"),seg("drive",120,"Return leg")]},
     {n:"TRK-03",d:"Mihai Rusu",tl:"TR-7702",s:"07:15",x:1,g:[seg("drive",300,"To FC WRO2"),seg("break",15,"Split part 1"),seg("drive",270,"Return via POZ1")]},
-    {n:"TRK-04",d:"Karl Weber",tl:"TR-5540",s:"04:45",sl:"12:10",td:40,g:[seg("drive",150,"To FC HAM2"),swap(40,"Drop & hook HAM2","TR-1288"),seg("drive",180,"To FC BER3")]},
+    {n:"TRK-04",d:"Karl Weber",tl:"TR-5540",s:"04:45",sl:"12:10",td:40,g:[seg("drive",150,"To FC HAM2"),
+      Object.assign(swap(40,"Drop & hook HAM2","TR-1288"),{slot:"07:30"}),seg("drive",180,"To FC BER3")]},
     {n:"TRK-05",d:"Piotr Nowak",tl:"TR-6633",s:"06:30",sl:"14:40",g:[seg("drive",190,"To meet point A2"),swap(40,"Meet A2 Bad Oeynhausen","TR-9004","M1"),seg("drive",200,"To FC SZZ1")]},
     {n:"TRK-06",d:"Jonas Berg",tl:"TR-8471",s:"05:00",g:[seg("drive",330,"To FC DUS2"),seg("other",30,"Ramp DUS2"),seg("drive",240,"To FC FRA7")]},
     {n:"TRK-07",d:"Luca Moretti",tl:"TR-3390",s:"08:00",sl:"19:00",rd:30,g:[seg("drive",240,"To FC MXP5"),swap(25,"Drop & hook MXP5","TR-4820"),seg("drive",210,"To FC BLQ1")]},
@@ -501,7 +507,10 @@ function demoData(){
   // the demo looks like a board mid-shift whatever hour it is opened at.
   const now=new Date();
   days[T].trucks.forEach((t,i)=>{const sim=simulate(t,T);
-    if(sim.events.length&&sim.end<now)t.arrived=fmtClock(new Date(sim.end.getTime()+(3+i%4)*MIN))});
+    if(!(sim.events.length&&sim.end<now))return;
+    // A finished tour was ticked off point by point through the day.
+    (sim.stops||[]).forEach(st=>{t.segments[st.i].arrived=fmtClock(new Date(+st.at+(2+i%5)*MIN))});
+    t.arrived=fmtClock(new Date(sim.end.getTime()+(3+i%4)*MIN))});
   // One truck is on a reported break right now, so the countdown is visible at any
   // hour the demo is opened; another stopped early, which costs it a second break.
   const live=days[T].trucks.find(t=>{if(t.arrived)return false;const s=simulate(t,T);
@@ -610,7 +619,7 @@ function simulate(tr,dateStr){
         if(D[o].pass>=45||(D[o].armed&&D[o].pass>=30)){D[o].since=0;D[o].armed=false;D[o].pass=0}}
     }};
 
-  const doOther=(type,label,mins,meta)=>{let rem=mins;
+  const doOther=(type,label,mins,meta,segIndex)=>{let rem=mins;
     while(rem>0){
       if(dueNow()){takeReported();continue}
       let chunk=rem;const cut=cutIn(chunk);if(cut>0)chunk=cut;
@@ -618,9 +627,10 @@ function simulate(tr,dateStr){
       // Every piece keeps the swap's identity: a break in the middle of a swap must
       // not shorten the window the partner truck is checked against.
       if(meta)Object.assign(events[events.length-1],meta);
+      if(segIndex!==undefined)events[events.length-1].segIndex=segIndex;
       rem-=chunk;D[1].pass=0;D[2].pass=0}};
 
-  for(const seg of tr.segments){
+  tr.segments.forEach((seg,segIndex)=>{
     while(dueNow())takeReported();
     if(seg.type==="drive")doDrive(seg.label||"Drive",seg.mins,seg.who);
     else if(seg.type==="break"){push("break",seg.label||"Break",seg.mins);totalBreak+=seg.mins;restAll(seg.mins)}
@@ -630,9 +640,9 @@ function simulate(tr,dateStr){
       // different trailer, and at a meet point a second truck has to be there too.
       const isSwap=seg.type==="swap";
       doOther(isSwap?"swap":"other",seg.label||(isSwap?"Trailer swap":"Work"),seg.mins,
-        isSwap?{takes:(seg.takes||"").trim(),meet:(seg.meet||"").trim()}:null);
+        isSwap?{takes:(seg.takes||"").trim(),meet:(seg.meet||"").trim()}:null,segIndex);
     }
-  }
+  });
   while(dueNow())takeReported();
   // Live delays — applied at end of planned tour
   if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
@@ -657,6 +667,7 @@ function simulate(tr,dateStr){
 
   let status="ok";
   const lift=s=>{if(RANK[s]>RANK[status])status=s};
+  const esc0=v=>String(v||"").trim();
   if(art7)lift("violation");
   const active=crew?[1,2]:[1];
   for(const w of active){const dr=D[w],tag=crew?"D"+w+" ":"";
@@ -670,13 +681,32 @@ function simulate(tr,dateStr){
     if(span>15*60){lift("violation");warnings.push("Shift span "+fmtHM(span)+" > 15h max")}
     else if(span>13*60){lift("risk");warnings.push("Span "+fmtHM(span)+" → reduced daily rest (9h) required")}
   }
+  // A tour is a chain of places, not one destination: the swap at the first FC has
+  // its own booked time, and missing it matters exactly as much as missing the last.
+  const stops=[];
+  tr.segments.forEach((seg,i)=>{
+    if(seg.type!=="other"&&seg.type!=="swap")return;
+    const first=events.find(e=>e.segIndex===i);
+    if(!first)return;
+    const st={i,label:seg.label||(seg.type==="swap"?"Trailer swap":"Stop"),at:first.start,
+      slot:seg.slot||"",arrived:seg.arrived||"",diff:null};
+    if(st.slot){let sl=parseTime(st.slot,dateStr);
+      if(sl<start)sl=new Date(sl.getTime()+24*60*MIN);
+      st.slotAt=sl;
+      st.diff=(sl-(st.arrived?parseTime(st.arrived,dateStr):first.start))/MIN;
+      if(st.diff<0){lift("violation");
+        warnings.push((st.arrived?"arrived at ":"misses the slot at ")+esc0(st.label)+
+          (st.arrived?" "+fmtHM(-st.diff)+" late":" by "+fmtHM(-st.diff)))}
+      else if(st.diff<20)lift("risk"),warnings.push("only "+fmtHM(st.diff)+" of slot buffer at "+esc0(st.label))}
+    stops.push(st)});
+
   let slotInfo=null;
   if(tr.slot){let slot=parseTime(tr.slot,dateStr);if(slot<start)slot=new Date(slot.getTime()+24*60*MIN);
     const diff=(slot-t)/MIN;slotInfo={slot,diff};
     if(diff<0){lift("violation");warnings.push("Misses slot by "+fmtHM(-diff)+(tr.trafficDelay||tr.rampDelay?" — consider Amazon dispute/notification":""))}
     else if(diff<20&&status==="ok"){lift("risk");warnings.push("Slot buffer only "+fmtHM(diff))}}
   const totalDrive=D[1].drive+D[2].drive;
-  return{events,start,end:t,totalDrive,d1:D[1].drive,d2:D[2].drive,totalBreak,driveLimit,span,warnings,status,slotInfo,crew};
+  return{events,start,end:t,totalDrive,d1:D[1].drive,d2:D[2].drive,totalBreak,driveLimit,span,warnings,status,slotInfo,stops,crew};
 }
 
 // ---------- fleet-wide sims & per-driver weekly analytics ----------
@@ -809,6 +839,17 @@ function runningBreakIndex(tr){
     if(b.open)return now>=st;                       // still standing until told otherwise
     return now>=st&&now<new Date(st.getTime()+(+b.mins||45)*MIN)});
 }
+// A tour is walked point by point: each place it stands, then the end of the tour.
+// The dispatcher ticks them off one call at a time, so the board has to know which
+// one is next rather than treating the whole tour as a single arrival.
+function tourStops(tr,s){
+  const list=(s.stops||[]).map(st=>({...st,kind:"seg"}));
+  list.push({kind:"end",label:"End of tour",at:s.end,slot:tr.slot||"",arrived:tr.arrived||"",
+    diff:s.slotInfo?s.slotInfo.diff:null,slotAt:s.slotInfo?s.slotInfo.slot:null});
+  return list;
+}
+function nextStopIndex(list){return list.findIndex(x=>!x.arrived)}
+
 // How long the driver has actually been standing, for an open break.
 function stoodFor(tr){
   const i=runningBreakIndex(tr);if(i<0)return null;
@@ -826,8 +867,9 @@ function trailerChain(tr,s){
 //   truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;segments
 // segments = "type:minutes:label|type:minutes:label|…"
 //   type: drive · drive2 (crew D2) · other/work · swap · break
-//   a swap may carry "#TRAILER" (the trailer taken) and "@CODE" (meet point), e.g.
-//   swap:45:Meet A2 Bad Oeynhausen #TR-8890 @M1
+//   a swap may carry "#TRAILER" (the trailer taken) and "@CODE" (meet point), and any
+//   stop may carry "!HH:MM" (its booked slot) and "=HH:MM" (when it was reached), e.g.
+//   swap:45:Meet A2 Bad Oeynhausen #TR-8890 @M1 !09:30 =09:41
 // breaks = clock:minutes pairs for breaks the driver actually took, e.g. 11:15:45|15:40:30
 // minutes accepts 300 · 5h · 5h30 · 5:30 · 330m.  Delimiter auto-detected: ; or , or TAB (Excel paste).
 function toMins(v){v=String(v||"").trim().toLowerCase();if(!v)return NaN;
@@ -851,6 +893,12 @@ function parseSegments(str,errs,ln){const segs=[];
     if(!map[type0]){errs.push("line "+ln+": unknown segment type '"+type0+"'");continue}
     if(!(mins>0)){errs.push("line "+ln+": bad minutes in '"+part+"'");continue}
     const seg={type:map[type0][0],mins,label,who:map[type0][1]};
+    if(seg.type==="other"||seg.type==="swap"){
+      const sl=seg.label.match(/!(\d{1,2}:\d{2})/);
+      if(sl){seg.slot=sl[1];seg.label=seg.label.replace(sl[0],"")}
+      const ar=seg.label.match(/=(\d{1,2}:\d{2})/);
+      if(ar){seg.arrived=ar[1];seg.label=seg.label.replace(ar[0],"")}
+      seg.label=seg.label.replace(/\s+/g," ").trim()}
     if(seg.type==="swap"){
       const mt=seg.label.match(/@([A-Za-z0-9_-]+)/);
       if(mt){seg.meet=mt[1].toUpperCase();seg.label=seg.label.replace(mt[0],"")}
@@ -932,6 +980,8 @@ function exportDayCSV(){
       const type=(s.type==="drive"&&s.who===2)?"drive2":s.type;
       let lab=String(s.label||"").replace(/\|/g,"/");
       if(s.type==="swap"){if(s.takes)lab+=" #"+s.takes;if(s.meet)lab+=" @"+s.meet}
+      if(s.slot)lab+=" !"+s.slot;
+      if(s.arrived)lab+=" ="+s.arrived;
       return type+":"+s.mins+":"+lab}).join("|")]);
   const csv="﻿"+["truck;driver;driver2;crew;trailer;date;start;slot;extended;arrived;breaks;segments"]
     .concat(rows.map(r=>r.map(csvField).join(";"))).join("\r\n");
@@ -1060,7 +1110,19 @@ const A={
     t.taken.splice(i,1);save();render()},
   arrive:(id,ev)=>{if(ev)ev.stopPropagation();
     const t=curTrucks().find(t=>t.id===id);if(!t)return;
-    t.arrived=t.arrived?"":fmtClock(new Date());save();render()},
+    const list=tourStops(t,simulate(t));
+    const n=nextStopIndex(list);
+    const stamp=fmtClock(new Date());
+    if(n>=0){const st=list[n];
+      if(st.kind==="end")t.arrived=stamp;else t.segments[st.i].arrived=stamp}
+    else{ // everything is ticked: take the last one back, for a mis-click
+      const last=list[list.length-1];
+      if(last.kind==="end")t.arrived="";else t.segments[last.i].arrived=""}
+    save();render()},
+  setStopArrived:(id,segIndex,v)=>{const t=curTrucks().find(t=>t.id===id);if(!t||!t.segments[segIndex])return;
+    t.segments[segIndex].arrived=v||"";save();render()},
+  setStopSlot:(id,segIndex,v)=>{const t=curTrucks().find(t=>t.id===id);if(!t||!t.segments[segIndex])return;
+    t.segments[segIndex].slot=v||"";save();render()},
   setArrived:(id,v)=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.arrived=v||"";save();render()},
   rmSeg:(id,i)=>{const t=curTrucks().find(t=>t.id===id);t.segments.splice(i,1);save();render()},
@@ -1255,6 +1317,11 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
   const live=now?liveOf(tr,s,now):{phase:"none"};
   const onBreakNow=runningBreakIndex(tr)>=0;
   const stood=stoodFor(tr);
+  const stopsList=tourStops(tr,s);
+  const doneStops=stopsList.filter(x=>x.arrived).length;
+  const tourDone=!!tr.arrived;
+  const nextIdx=nextStopIndex(stopsList);
+  const nextStop=nextIdx>=0?stopsList[nextIdx]:null;
   const tourSpan=Math.max((s.end-s.start)/MIN,1);
   // A leg cut in two by an inserted break stays ONE leg to the planner, so the
   // label is printed on its first part only — otherwise the strip reads as two
@@ -1280,10 +1347,19 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
     `<div class="tl-meet" style="left:${sc.pct(new Date((+e.start+ +e.end)/2))}%" title="Meet ${esc(e.meet)} · ${
       esc(e.label)} · here ${fmtClock(e.start)}–${fmtClock(e.end)} · partner: ${esc(partnerOf(e))}"></div>`).join("");
   const meetTitle=swapEvents.map(e=>"Meet "+e.meet+" with "+partnerOf(e)).join(" · ");
-  const slotMark=s.slotInfo?`<div class="tl-slot" style="left:${sc.pct(s.slotInfo.slot)}%;background:${SC[s.status]};color:${SC[s.status]}" title="Slot ${fmtClock(s.slotInfo.slot)}"></div>`:"";
+  // Every booked time on the tour gets its own pin, not just the last one.
+  const slotMark=stopsList.filter(x=>x.slotAt).map(x=>{
+    const late=x.diff!==null&&x.diff<0;
+    const col=x.arrived?"var(--ok)":late?"var(--bad)":SC[st];
+    return `<div class="tl-slot" style="left:${sc.pct(x.slotAt)}%;background:${col};color:${col}" title="${
+      esc(x.label)} · slot ${fmtClock(x.slotAt)}${x.arrived?" · arrived "+esc(x.arrived):""}"></div>`}).join("");
   const nowMark=nowPct!==null?`<div class="tl-now" style="left:${nowPct}%"></div>`:"";
   const driveTxt=tr.crew?fmtHM(Math.max(s.d1,s.d2)):fmtHM(s.totalDrive);
-  const slotTxt=s.slotInfo?(s.slotInfo.diff>=0?"+"+fmtHM(s.slotInfo.diff):"−"+fmtHM(-s.slotInfo.diff)):SL[st];
+  // The number that matters is the buffer on the point the truck is heading for now,
+  // not on the end of a tour it will not reach for hours.
+  const watch=stopsList.find(x=>!x.arrived&&x.slotAt)||null;
+  const slotTxt=watch?(watch.diff>=0?"+"+fmtHM(watch.diff):"−"+fmtHM(-watch.diff))
+    :(s.slotInfo&&tourDone?(s.slotInfo.diff>=0?"+"+fmtHM(s.slotInfo.diff):"−"+fmtHM(-s.slotInfo.diff)):SL[st]);
   const chain=trailerChain(tr,s);
 
   let liveTxt="",liveCls="";
@@ -1296,10 +1372,14 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
     liveCls=stood>=45?"brk":"run",liveTxt="STOOD "+fmtHM(stood);
   else if(live.phase==="running"&&live.onBreak)liveCls="brk",
     liveTxt=(live.reported?"BREAK ":"break ")+fmtHM(live.breakLeft);
-  else if(live.phase==="running")liveCls=live.etaMin<=60?"soon":"run",liveTxt="ETA "+fmtHM(live.etaMin);
+  else if(live.phase==="running"){
+    // Counting down to the next place the truck is due, which is what the dispatcher
+    // is waiting on — the end of the tour may be several stops away.
+    const target=nextStop&&nextStop.at>now?(nextStop.at-now)/MIN:live.etaMin;
+    liveCls=target<=60?"soon":"run";liveTxt="ETA "+fmtHM(target)}
   else if(live.phase==="overdue")liveCls="late",liveTxt="due "+fmtHM(live.lateMin)+" ago";
 
-  return `<div class="trow ${open?"open":""} ${tr.arrived?"done":""}">
+  return `<div class="trow ${open?"open":""} ${tourDone?"done":""}">
     <div class="thead grid5" onclick="A.toggle('${tr.id}')">
       <div class="tname">
         <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}" title="${tr.arrived?"Arrived":SL[st]}"></span><span class="vh">${tr.arrived?"Arrived":SL[st]}</span>
@@ -1308,9 +1388,11 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         ${tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours">TRAFFIC</span>`:""}
         ${tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, it shifts the arrival but not the driving hours">RAMP</span>`:""}
         ${swapEvents.length?`<span class="badge meet" title="${esc(meetTitle)}">MEET</span>`:""}
+        ${stopsList.length>1?`<span class="badge stops" title="${esc(stopsList.map(x=>(x.arrived?"✓ ":"· ")+x.label+(x.slot?" (slot "+x.slot+")":"")).join(" · "))}">${doneStops}/${stopsList.length}</span>`:""}
       </div>
       <div class="drv">${esc(tr.driver)||"<i>no driver</i>"}${tr.crew&&tr.driver2?" + "+esc(tr.driver2.split(" ")[0]):""}
-        ${chain.length?`<span class="trailer">${chain.length>1?esc(chain[0])+" → <b>"+esc(chain[chain.length-1])+"</b>":"<b>"+esc(chain[0])+"</b>"}</span>`:""}</div>
+        ${now&&nextStop&&!tourDone&&stopsList.length>1?`<span class="trailer" title="Next point on the tour">→ ${esc(nextStop.label)}</span>`:
+          chain.length?`<span class="trailer">${chain.length>1?esc(chain[0])+" → <b>"+esc(chain[chain.length-1])+"</b>":"<b>"+esc(chain[0])+"</b>"}</span>`:""}</div>
       <div class="tl"><div class="tl-grid">${
         rulerTicks(sc).map(t=>`<div class="tl-tick" style="left:${t.p}%"></div>`).join("")}</div>${bar}${slotMark}${meetDots}${nowMark}</div>
       <div class="hrs ${Math.max(s.d1,s.d2)>s.driveLimit?"over":""}" title="${tr.crew?"D1 "+fmtHM(s.d1)+" · D2 "+fmtHM(s.d2):""}">${driveTxt}<small>of ${fmtHM(s.driveLimit)}</small></div>
@@ -1321,7 +1403,9 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow
           ?(stood!==null?"Standing "+fmtHM(stood)+(stood<45?" — needs "+fmtHM(45-stood)+" more for a legal break":" — legal since "+fmtClock(new Date(Date.now()-(stood-45)*MIN)))+" · click when he rolls again":"Reported break — click to undo")
           :"Driver has stopped — click again when he rolls"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
-        <button class="arrbtn ${tr.arrived?"on":""}" title="${tr.arrived?"Arrived "+tr.arrived+" — click to undo":"Mark as arrived"}" onclick="A.arrive('${tr.id}',event)">${I.check}</button>
+        <button class="arrbtn ${tourDone?"on":""}" title="${nextStop
+          ?"Driver reports arrival at "+esc(nextStop.label)+(nextStop.slot?" (slot "+nextStop.slot+")":"")
+          :"Tour complete — click to take the last arrival back"}" onclick="A.arrive('${tr.id}',event)">${I.check}</button>
       </div>
     </div>
     ${open?editor(tr,s,extra):""}
@@ -1335,6 +1419,9 @@ function editor(tr,s,extra){
       <span class="sl">${esc(sg.label)||"<span style='color:var(--text3)'>untitled</span>"}</span>
       ${sg.type==="swap"&&sg.takes?`<span class="takes">→ ${esc(sg.takes)}</span>`:""}
       ${sg.type==="swap"&&sg.meet?`<span class="mchip" title="Meet point — the partner truck must be here at the same time">${esc(sg.meet)}</span>`:""}
+      ${sg.type==="other"||sg.type==="swap"?`
+        <input type="time" class="field slotin" value="${esc(sg.slot||"")}" title="Booked slot at this stop — leave empty if there is none" onchange="A.setStopSlot('${tr.id}',${i},this.value)">
+        ${sg.arrived?`<button class="arrchip" title="Arrived ${esc(sg.arrived)} — click to clear" onclick="A.setStopArrived('${tr.id}',${i},'')">✓ ${esc(sg.arrived)}</button>`:""}`:""}
       <span class="sm">${fmtHM(sg.mins)}</span>
       <button class="mini" title="Move up" onclick="A.mvSeg('${tr.id}',${i},-1)">${I.up}</button>
       <button class="mini" title="Move down" onclick="A.mvSeg('${tr.id}',${i},1)">${I.down}</button>
@@ -1527,6 +1614,7 @@ function renderImport(){
     <div class="fmt">truck ; driver ; driver2 ; crew ; trailer ; date ; start ; slot ; extended ; arrived ; breaks ; segments
 segments = type:minutes:label | …    type: drive · drive2 (crew) · other · swap · break
 a swap label may carry #TRAILER (the trailer taken) and @CODE (meet point), e.g. swap:40:Meet A2 #TR-9004 @M1
+any stop may carry !HH:MM (its own booked slot) and =HH:MM (when the driver reached it)
 breaks = breaks the driver actually took, as clock:minutes — 11:15:45|15:40:30 (a trailing + means still standing)
 minutes: 300 or 5h00 or 5:30    date: YYYY-MM-DD, empty = the open day    crew / extended: 1 or empty
 Only truck and segments are required; columns may be in any order.
