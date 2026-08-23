@@ -540,16 +540,42 @@ function simulate(tr,dateStr){
   // is short. Such a break is pinned to a real clock time, so it cuts whatever the
   // plan had at that moment and resets the counter there. The plan bends to reality
   // instead of reality being assumed away.
+  // Times are read against the board's date, so a night tour reporting a break at
+  // 00:30 has to be understood as the next day — the same rollover the slot gets.
   const reported=(tr.taken||[]).filter(b=>b&&b.at&&+b.mins>0)
-    .map(b=>({at:parseTime(b.at,dateStr),mins:Math.round(+b.mins)}))
+    .map(b=>{let at=parseTime(b.at,dateStr);
+      if(start-at>12*60*MIN)at=new Date(at.getTime()+24*60*MIN);
+      return{at,mins:Math.round(+b.mins)}})
     .sort((a,b)=>a.at-b.at);
-  let ri=0;
-  const dueNow=()=>ri<reported.length&&reported[ri].at<=t;
+  let ri=0,art7=false,earlyStop=false;
+  const pending=()=>ri<reported.length;
+  const dueNow=()=>pending()&&reported[ri].at<=t;
   // minutes from now until the next reported break, if it falls inside this stretch
-  const cutIn=span=>{if(ri>=reported.length)return -1;
+  const cutIn=span=>{if(!pending())return -1;
     const d=(reported[ri].at-t)/MIN;return(d>0&&d<span)?d:-1};
-  const takeReported=()=>{const b=reported[ri++];
-    if(b.at>t)warnings.push("break reported at "+fmtClock(b.at)+" is later than the plan reaches — the plan is behind reality");
+  // Is the driver's real stop close enough to belong to the stretch being driven?
+  // If it is, the plan must not invent a break before it; if it is hours away, the
+  // report is stale data and the plan carries on predicting normally.
+  const realSoon=rem=>pending()&&(reported[ri].at-t)/MIN<=rem;
+
+  // atEnd marks a break flushed after the tour is over: at that point the counter
+  // is naturally below 4h30, so it must not be mistaken for stopping early.
+  const takeReported=(who,atEnd)=>{const b=reported[ri++];
+    const w=crew?(who||1):1;
+    // If the plan is already standing still where the driver says he stopped, that
+    // is the same rest seen twice — count it once.
+    const last=events[events.length-1];
+    if(last&&last.type==="break"&&!last.reported&&b.at<last.end&&last.mins>=b.mins){
+      last.reported=true;return}
+    if(b.at<start)warnings.push("break reported at "+fmtClock(b.at)+" is before the tour starts — check the time");
+    else if(b.at>t)warnings.push("break reported at "+fmtClock(b.at)+" is later than the plan reaches — the plan is behind reality");
+    // The counter is reset by the break actually taken, so if the driver was still
+    // rolling past 4h30 when he stopped, that is an Art. 7 over-run. Catching it is
+    // the whole reason this tool listens to what happened instead of what was planned.
+    const drove=D[w].since;
+    if(!atEnd&&drove<270&&b.mins>=15)earlyStop=true;
+    if(drove>270){art7=true;
+      warnings.push("drove "+fmtHM(drove)+" straight before the break reported at "+fmtClock(b.at)+" — over the 4h30 limit (Art. 7)")}
     push("break","Break "+b.mins+"m (reported)",b.mins);
     events[events.length-1].reported=true;
     totalBreak+=b.mins;restAll(b.mins);
@@ -558,23 +584,28 @@ function simulate(tr,dateStr){
 
   const doDrive=(label,mins,who)=>{who=crew?(who||1):1;let rem=mins;
     while(rem>0){
-      if(dueNow()){takeReported();continue}
+      if(dueNow()){takeReported(who);continue}
       const dr=D[who];
-      if(270-dr.since<=0){autoBreak(who);continue}
-      let chunk=Math.min(rem,270-dr.since);
+      // A reported stop that belongs to this stretch outranks the planned one: the
+      // break happens where the driver took it, not where the schedule wanted it.
+      const soon=realSoon(rem);
+      if(!soon&&270-dr.since<=0){autoBreak(who);continue}
+      let chunk=soon?rem:Math.min(rem,270-dr.since);
       const cut=cutIn(chunk);if(cut>0)chunk=cut;
       push(who===2?"drive2":"drive",label,chunk,who);
       dr.drive+=chunk;dr.since+=chunk;dr.pass=0;rem-=chunk;
       if(crew){const o=who===1?2:1;D[o].pass+=chunk; // passenger in moving vehicle
         if(D[o].pass>=45||(D[o].armed&&D[o].pass>=30)){D[o].since=0;D[o].armed=false;D[o].pass=0}}
-      if(rem>0&&dr.since>=270)autoBreak(who)}};
+    }};
 
-  const doOther=(type,label,mins,meta)=>{let rem=mins,first=true;
+  const doOther=(type,label,mins,meta)=>{let rem=mins;
     while(rem>0){
       if(dueNow()){takeReported();continue}
       let chunk=rem;const cut=cutIn(chunk);if(cut>0)chunk=cut;
       push(type,label,chunk);
-      if(first&&meta){Object.assign(events[events.length-1],meta);first=false}
+      // Every piece keeps the swap's identity: a break in the middle of a swap must
+      // not shorten the window the partner truck is checked against.
+      if(meta)Object.assign(events[events.length-1],meta);
       rem-=chunk;D[1].pass=0;D[2].pass=0}};
 
   for(const seg of tr.segments){
@@ -594,7 +625,7 @@ function simulate(tr,dateStr){
   // Live delays — applied at end of planned tour
   if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
   if(tr.rampDelay>0){push("other","⚠ Ramp queue",tr.rampDelay);D[1].pass=0;D[2].pass=0}
-  while(ri<reported.length)takeReported();
+  while(ri<reported.length)takeReported(1,true);
 
   // Stopping early is always legal, but it is not always free: break at 4h00 and
   // the stretch still to drive may pass 4h30, which forces a second break the plan
@@ -606,13 +637,15 @@ function simulate(tr,dateStr){
     // by counting break events: a 10-minute stop that does not qualify adds an
     // event without adding a break, while stopping at 4h00 adds a real 45 minutes.
     const moreBreak=totalBreak-asPlanned.totalBreak;
-    if(cost>=1)warnings.push("stopping early costs "+fmtHM(cost)+" against the plan"+
+    if(cost>=1)warnings.push((earlyStop?"stopping early costs ":"the reported break adds ")+fmtHM(cost)+
+      (earlyStop?" against the plan":" to the plan")+
       (moreBreak>=30?" — the tour now needs a second full break":
        moreBreak>0?" — the stop was too short to count, so it is simply lost time":""));
   }
 
   let status="ok";
   const lift=s=>{if(RANK[s]>RANK[status])status=s};
+  if(art7)lift("violation");
   const active=crew?[1,2]:[1];
   for(const w of active){const dr=D[w],tag=crew?"D"+w+" ":"";
     if(dr.drive>driveLimit){lift("violation");warnings.push(tag+"driving "+fmtHM(dr.drive)+" > limit "+fmtHM(driveLimit)+(tr.trafficDelay&&w===1?" (incl. traffic)":""))}
@@ -722,8 +755,13 @@ function liveOf(tr,s,now){
 function analyzeMeets(rows){
   const by={};
   rows.forEach(r=>r.sim.events.forEach(e=>{
-    if(e.type==="swap"&&e.meet)(by[e.meet]=by[e.meet]||[]).push({
-      truck:r.tr.name,id:r.tr.id,start:e.start,end:e.end,label:e.label})}));
+    if(!(e.type==="swap"&&e.meet))return;
+    const list=by[e.meet]=by[e.meet]||[];
+    // A reported break can cut a swap in two; both halves are the same truck
+    // standing in the same yard, so they describe one window, not two arrivals.
+    const same=list.find(p=>p.id===r.tr.id);
+    if(same){if(e.start<same.start)same.start=e.start;if(e.end>same.end)same.end=e.end}
+    else list.push({truck:r.tr.name,id:r.tr.id,start:e.start,end:e.end,label:e.label})}));
   const out={};
   for(const code of Object.keys(by)){
     const parts=by[code].sort((a,b)=>a.start-b.start);
@@ -749,6 +787,15 @@ function meetIssues(tr,meets){
   return out;
 }
 // What the truck is pulling, start to finish: the swaps rewrite it along the way.
+// The row's pause button and its undo have to agree on one definition of "a break
+// is running right now", or the button lights while clicking it adds a second one.
+// It is only ever true on today's board — on any other date there is no "now".
+function runningBreakIndex(tr){
+  if(state.date!==todayStr())return -1;
+  const now=new Date();
+  return (tr.taken||[]).findIndex(b=>{const st=parseTime(b.at,state.date);
+    return now>=st&&now<new Date(st.getTime()+(+b.mins||45)*MIN)});
+}
 function trailerChain(tr,s){
   const chain=[tr.trailer||""];
   s.events.forEach(e=>{if(e.type==="swap"&&e.takes)chain.push(e.takes)});
@@ -931,7 +978,10 @@ const A={
   gotoDate:v=>{if(v){state.date=v;state.openId=null;render()}},
   gotoToday:()=>{state.date=todayStr();state.openId=null;render()},
   copyPrev:()=>{const src=prevDayWithData();if(!src)return;ensureDay();
-    state.days[state.date].trucks=state.days[src].trucks.map(t=>({...JSON.parse(JSON.stringify(t)),id:uid(),trafficDelay:0,rampDelay:0}));
+    // Yesterday's board is a template, not yesterday's events: what actually
+    // happened stays on the day it happened.
+    state.days[state.date].trucks=state.days[src].trucks.map(t=>({...JSON.parse(JSON.stringify(t)),
+      id:uid(),trafficDelay:0,rampDelay:0,arrived:"",taken:[]}));
     save();render()},
   // Someone arriving from a CV link with the query string stripped would otherwise
   // meet an empty board and no way in. Only offered when the device holds no data
@@ -973,11 +1023,9 @@ const A={
   breakNow:(id,ev,mins)=>{if(ev)ev.stopPropagation();
     const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.taken=t.taken||[];
-    const now=new Date();
-    const running=t.taken.findIndex(b=>{const st=parseTime(b.at);
-      return now>=st&&now<new Date(st.getTime()+(+b.mins||45)*MIN)});
+    const running=runningBreakIndex(t);
     if(running>=0&&!mins)t.taken.splice(running,1);
-    else t.taken.push({at:fmtClock(now),mins:mins||45});
+    else t.taken.push({at:fmtClock(new Date()),mins:mins||45});
     save();render()},
   addBreak:(id,mins)=>{const t=curTrucks().find(t=>t.id===id);if(!t)return;
     t.taken=t.taken||[];t.taken.push({at:fmtClock(new Date()),mins:mins||45});save();render()},
@@ -1180,6 +1228,7 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
   const open=state.openId===tr.id;
   const hasDelay=tr.trafficDelay>0||tr.rampDelay>0;
   const live=now?liveOf(tr,s,now):{phase:"none"};
+  const onBreakNow=runningBreakIndex(tr)>=0;
   const tourSpan=Math.max((s.end-s.start)/MIN,1);
   // A leg cut in two by an inserted break stays ONE leg to the planner, so the
   // label is printed on its first part only — otherwise the strip reads as two
@@ -1238,7 +1287,7 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         liveTxt?`<span class="live ${liveCls}">${liveTxt}</span>`
               :`<small>${s.events.length?fmtClock(s.start)+"→"+fmtClock(s.end):"—"}</small>`}</div>
       <div class="acts">
-        <button class="arrbtn brk ${live.onBreak&&live.reported?"on":""}" title="${live.onBreak&&live.reported?"On a reported break — click to undo":"Driver is taking a break now (45 min)"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
+        <button class="arrbtn brk ${onBreakNow?"on":""}" title="${onBreakNow?"On a reported break — click to undo":"Driver is taking a break now (45 min)"}" onclick="A.breakNow('${tr.id}',event)">${I.pause}</button>
         <button class="arrbtn ${tr.arrived?"on":""}" title="${tr.arrived?"Arrived "+tr.arrived+" — click to undo":"Mark as arrived"}" onclick="A.arrive('${tr.id}',event)">${I.check}</button>
       </div>
     </div>
