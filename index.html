@@ -429,7 +429,9 @@ function addDays(s,n){const d=dateFromStr(s);d.setDate(d.getDate()+n);return fmt
 function mondayOf(s){const d=dateFromStr(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return fmtDate(d)}
 const WD=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 function dayLabel(s){const d=dateFromStr(s);return{wd:WD[(d.getDay()+6)%7],dm:pad2(d.getDate())+"."+pad2(d.getMonth()+1)}}
-function fmtHM(m){const neg=m<0;m=Math.abs(m);const h=Math.floor(m/60),mm=Math.round(m%60);return(neg?"−":"")+h+"h"+pad2(mm)}
+// Round the whole quantity first: rounding the minute remainder on its own lets it
+// reach 60 and print "0h60".
+function fmtHM(m){const neg=m<0;m=Math.round(Math.abs(m));return(neg?"−":"")+Math.floor(m/60)+"h"+pad2(m%60)}
 function fmtClock(d){return d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}
 function parseTime(str,dateStr){const[h,m]=(str||"0:0").split(":").map(Number);const d=dateFromStr(dateStr||state.date);d.setHours(h||0,m||0,0,0);return d}
 function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
@@ -545,7 +547,7 @@ function simulate(tr,dateStr){
   const reported=(tr.taken||[]).filter(b=>b&&b.at&&+b.mins>0)
     .map(b=>{let at=parseTime(b.at,dateStr);
       if(start-at>12*60*MIN)at=new Date(at.getTime()+24*60*MIN);
-      return{at,mins:Math.round(+b.mins)}})
+      return{at,mins:Math.max(1,Math.round(+b.mins))}})
     .sort((a,b)=>a.at-b.at);
   let ri=0,art7=false,earlyStop=false;
   const pending=()=>ri<reported.length;
@@ -624,7 +626,7 @@ function simulate(tr,dateStr){
   while(dueNow())takeReported();
   // Live delays — applied at end of planned tour
   if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
-  if(tr.rampDelay>0){push("other","⚠ Ramp queue",tr.rampDelay);D[1].pass=0;D[2].pass=0}
+  if(tr.rampDelay>0)doOther("other","⚠ Ramp queue",tr.rampDelay,null);
   while(ri<reported.length)takeReported(1,true);
 
   // Stopping early is always legal, but it is not always free: break at 4h00 and
