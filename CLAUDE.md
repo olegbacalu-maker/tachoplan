@@ -90,6 +90,14 @@ is close, no automatic break is inserted, so accumulated driving is allowed to
 run past 4h30 — which is exactly how an Article 7 over-run is detected instead
 of being papered over with a break that never happened.
 
+**A live delay is placed by the arrival stamps, not by the clock.** `trafficDelay`
+and `rampDelay` go in after the last stop stamped `arrived` — in front of the whole
+tour when nothing is stamped, at the tail when `tr.arrived` is set — so every stop
+still ahead moves with them and is re-checked against its own slot. Putting them
+back at the end restores the old defect: fifteen minutes lost on the road before a
+trailer swap left that swap reading on time. Reading the wall clock instead of the
+stamps would give a past day a different answer every time it is opened.
+
 **The two midnight rollovers differ on purpose.** Reported breaks roll forward
 only when more than twelve hours before the tour start; slots roll whenever they
 fall earlier than the start. Harmonising them breaks one case or the other.

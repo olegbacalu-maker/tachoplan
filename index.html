@@ -395,7 +395,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.7</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.8</div>
   </div>
 </aside>
 <div class="main">
@@ -645,8 +645,25 @@ function simulate(tr,dateStr){
       if(segIndex!==undefined)events[events.length-1].segIndex=segIndex;
       rem-=chunk;D[1].pass=0;D[2].pass=0}};
 
+  // ---------- live delays ----------
+  // A delay is reported while the tour is running, so it belongs where the truck
+  // actually is, not at the end of the day: a quarter of an hour lost on the road
+  // before a swap has to make that swap a quarter of an hour late, or the slot is
+  // measured against a time nobody is going to keep. What the truck has already
+  // done is what has been stamped, so the delay goes in after the last stop stamped
+  // as arrived and pushes every stop still ahead of it. Nothing stamped means the
+  // truck has not reached its first point yet; a tour stamped to the end has taken
+  // the delay already, and there it stays the tail it always was.
+  let delayAt=tr.arrived?tr.segments.length:0;
+  if(!tr.arrived)tr.segments.forEach((seg,i)=>{
+    if((seg.type==="other"||seg.type==="swap")&&seg.arrived)delayAt=i+1});
+  const liveDelays=()=>{
+    if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
+    if(tr.rampDelay>0)doOther("other","⚠ Ramp queue",tr.rampDelay,null)};
+
   tr.segments.forEach((seg,segIndex)=>{
     while(dueNow())takeReported();
+    if(segIndex===delayAt)liveDelays();
     if(seg.type==="drive")doDrive(seg.label||"Drive",seg.mins,seg.who);
     else if(seg.type==="break"){push("break",seg.label||"Break",seg.mins);totalBreak+=seg.mins;restAll(seg.mins)}
     else{
@@ -659,9 +676,7 @@ function simulate(tr,dateStr){
     }
   });
   while(dueNow())takeReported();
-  // Live delays — applied at end of planned tour
-  if(tr.trafficDelay>0)doDrive("⚠ Traffic",tr.trafficDelay,1);
-  if(tr.rampDelay>0)doOther("other","⚠ Ramp queue",tr.rampDelay,null);
+  if(delayAt>=tr.segments.length)liveDelays();
   while(ri<reported.length)takeReported(1,true);
 
   // Stopping early is always legal, but it is not always free: break at 4h00 and
@@ -1600,8 +1615,8 @@ function truckRow({tr,sim:s,st,extra},sc,nowPct,now){
         <span class="dot" style="background:${tr.arrived?"var(--ok)":SC[st]}" title="${tr.arrived?"Arrived":SL[st]}"></span><span class="vh">${tr.arrived?"Arrived":SL[st]}</span>
         <b>${esc(tr.name)}</b>
         ${tr.crew?`<span class="badge crew">2×</span>`:""}
-        ${tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours">TRAFFIC</span>`:""}
-        ${tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, it shifts the arrival but not the driving hours">RAMP</span>`:""}
+        ${tr.trafficDelay>0?`<span class="badge traffic" title="Traffic ${tr.trafficDelay} min — counts as driving, so it burns the driver's hours, and it goes in where the truck is now: every point still ahead moves with it">TRAFFIC</span>`:""}
+        ${tr.rampDelay>0?`<span class="badge ramp" title="Ramp queue ${tr.rampDelay} min — counts as other work, so it shifts every point still ahead but not the driving hours">RAMP</span>`:""}
         ${swapEvents.length?`<span class="badge meet" title="${esc(meetTitle)}">MEET</span>`:""}
         ${stopsList.length>1?`<span class="badge stops" title="${esc(stopsList.map(x=>(x.arrived?"✓ ":"· ")+x.label+(x.slot?" (slot "+x.slot+")":"")).join(" · "))}">${doneStops}/${stopsList.length}</span>`:""}
       </div>
@@ -1720,7 +1735,7 @@ function editor(tr,s,extra){
       <div class="ehd">Live disruption</div>
       <div class="dgrid">
         <div class="dbox">
-          <span class="dl t">Traffic delay — counts as driving</span>
+          <span class="dl t" title="Lost on the road: it counts as driving and goes in where the truck is now — after the last point stamped as arrived — so every stop still ahead moves with it">Traffic delay — counts as driving</span>
           <div class="dr">
             <input type="number" min="0" class="field" value="${tr.trafficDelay||0}" onchange="A.set('${tr.id}','trafficDelay',Math.max(0,parseInt(this.value)||0))">
             <span class="u">min</span>
@@ -1729,7 +1744,7 @@ function editor(tr,s,extra){
           </div>
         </div>
         <div class="dbox">
-          <span class="dl r">Ramp queue — counts as other work</span>
+          <span class="dl r" title="Standing at the ramp: it counts as other work and goes in where the truck is now — after the last point stamped as arrived — so every stop still ahead moves, but the driving hours do not">Ramp queue — counts as other work</span>
           <div class="dr">
             <input type="number" min="0" class="field" value="${tr.rampDelay||0}" onchange="A.set('${tr.id}','rampDelay',Math.max(0,parseInt(this.value)||0))">
             <span class="u">min</span>
