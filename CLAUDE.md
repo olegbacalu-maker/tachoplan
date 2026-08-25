@@ -160,6 +160,18 @@ the weekly verdicts of neighbouring days.
   intermediate stops move the `n/m` counter instead.
 - Two taps on pause inside a minute delete the break. That is the mis-click
   undo, not lost data.
+- A KPI tile is a button exactly when it counts trucks, because pressing it puts
+  that set on the board. "Drivers on duty" and "Fleet driving time" are totals
+  with no subset behind them, and stay plain `div`s — making every tile pressable
+  would promise a list that cannot be shown. The number on a tile must equal the
+  rows you get when you press it; `renderTiles` and `filterRows` count separately,
+  so a new tile has to be checked against its own filter.
+- Only one filter at a time, tiles and status chips sharing `state.filter`. The
+  active tile filter also gets a chip of its own, because the tiles scroll out of
+  sight and a board cut down with nothing saying so reads as a board with three
+  trucks on it.
+- `due` and `arrived` filter by the clock, so they are dropped on the way out of
+  today rather than left to empty a planning board.
 
 ## Conventions
 

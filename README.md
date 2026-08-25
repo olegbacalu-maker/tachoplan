@@ -42,7 +42,8 @@ Built by a professional truck driver moving into transport planning: the tool mo
 
 **Working the board**
 - One time scale for the whole day: every truck drawn on the same clock with an hour ruler, slot pins and a now marker, so tours are comparable at a glance
-- KPI tiles — trucks, tightest slot buffer, delays and tours to fix, joined on the current day by "arriving within 1h" and "arrived" — status filters, and search across truck, driver, trailer number, leg label and meet code
+- KPI tiles — trucks, tightest slot buffer, delays and tours to fix, joined on the current day by "arriving within 1h" and "arrived". A tile that counts trucks is a button: press it and the board holds exactly those trucks, press it again for the whole board. The tiles that are totals stay plain, because there is no subset of the board behind them
+- Status filters, and search across truck, driver, trailer number, leg label and meet code — a filter and a search narrow together
 - Day-by-day boards with date navigation and one-click copy of the most recent day that has trucks on it
 - CSV import — a file or a straight paste out of Excel — and Excel-friendly CSV export of the open day
 - A **backup file** carries every planned day at once, for moving between devices or keeping a copy ([example CSV](example_tours.csv) ships with the repo)

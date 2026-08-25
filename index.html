@@ -154,6 +154,12 @@ input[type=date].field,input[type=time].field{color-scheme:light}
 .tile.risk .kv b{color:var(--risk-t)}
 .tile.bad .ico{background:var(--bad-soft);color:var(--bad-t)}
 .tile.bad .kv b{color:var(--bad-t)}
+/* A pressed tile is a selection, so it is drawn in brand blue: the number keeps
+   whatever tachograph colour it had, the frame says which set is on screen. */
+button.tile{font:inherit;color:inherit;text-align:left;width:100%;cursor:pointer}
+button.tile:hover{border-color:var(--text3)}
+button.tile.on{border-color:var(--brand);background:var(--brand-soft)}
+button.tile.on .kv span{color:var(--brand-d)}
 
 .bar-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
 .chip{height:32px;border:1px solid var(--line);background:var(--panel);border-radius:20px;padding:0 14px;
@@ -395,7 +401,7 @@ input[type=date].field,input[type=time].field{color-scheme:light}
     <div class="li"><i style="background:var(--work)"></i>Other work · ramp</div>
     <div class="li"><i style="background:var(--swap)"></i>Trailer swap</div>
     <div class="li"><i style="background:var(--brk)"></i>Break</div>
-    <div class="ver">Reg (EC) 561/2006 · v3.8</div>
+    <div class="ver">Reg (EC) 561/2006 · v3.9</div>
   </div>
 </aside>
 <div class="main">
@@ -1221,6 +1227,9 @@ const A={
     applyTheme();render()},
   toggle:id=>{state.openId=state.openId===id?null:id;render()},
   filter:f=>{state.filter=f;render()},
+  // Pressed from the Drivers tab the tile would otherwise set a filter nothing on
+  // screen obeys, so it takes you to the board it is talking about.
+  tileFilter:f=>{state.filter=f;state.view="board";render()},
   view:v=>{state.view=v;state.openId=null;render()},
   shiftDay:n=>{state.date=addDays(state.date,n);state.openId=null;render()},
   gotoDate:v=>{if(v){state.date=v;state.openId=null;render()}},
@@ -1407,6 +1416,7 @@ function render(){
   const rows=today.map(x=>{const{st,extra}=truckStatus(x,drv);return{...x,st,extra}});
 
   const dl=dayLabel(state.date),isToday=state.date===todayStr();
+  if(!isToday&&LIVE_FILTER.has(state.filter))state.filter="all";
   document.getElementById("dlab").innerHTML=
     `<span class="${isToday?"today":""}">${dl.wd.toUpperCase()}${isToday?" · TODAY":""}</span><b>${dl.dm}</b>`;
   document.getElementById("datepick").value=state.date;
@@ -1450,6 +1460,37 @@ function truckStatus(x,drv){
   return{st,extra};
 }
 
+// A tile that counts trucks names a set of them, so pressing it puts that set on
+// the board and nothing else. The tiles that are totals — drivers on duty, fleet
+// driving time — have no subset behind them and stay plain. One selection at a
+// time, the way the status chips already work: two filters at once would be a rule
+// nobody can read off the board.
+const TILE_FILTER={due:"Due within 1h",arrived:"Arrived",tight:"Tightest slot",
+  delayed:"Delayed",issues:"To fix"};
+// Nothing is live on any date except today, so these two mean nothing on a
+// planning view and are dropped rather than left to empty the board.
+const LIVE_FILTER=new Set(["due","arrived"]);
+function filterRows(rows,f){
+  switch(f){
+    case "ok":case "risk":case "violation":return rows.filter(r=>r.st===f);
+    case "issues":return rows.filter(r=>r.st!=="ok");
+    case "delayed":return rows.filter(r=>r.tr.trafficDelay>0||r.tr.rampDelay>0);
+    // One number on the tile, and behind it whichever truck holds it — with every
+    // truck tied with it, because a dispatcher chasing the tightest slot needs to
+    // see all of them, not the first one the sort happened to return.
+    case "tight":{const w=rows.filter(r=>r.sim.slotInfo);if(!w.length)return[];
+      const m=Math.min(...w.map(r=>r.sim.slotInfo.diff));
+      return w.filter(r=>r.sim.slotInfo.diff===m)}
+    // The tile carries both numbers it is counting, so pressing it has to return
+    // both: the trucks closing in, and the ones already past due.
+    case "due":{const now=new Date();return rows.filter(r=>{const l=liveOf(r.tr,r.sim,now);
+      return l.phase==="overdue"||(l.phase==="running"&&l.etaMin<=60)})}
+    case "arrived":{const now=new Date();
+      return rows.filter(r=>liveOf(r.tr,r.sim,now).phase==="arrived")}
+    default:return rows;
+  }
+}
+
 function renderTiles(rows,drv){
   const counts={ok:0,risk:0,violation:0};rows.forEach(r=>counts[r.st]++);
   const drivers=new Set();
@@ -1461,14 +1502,22 @@ function renderTiles(rows,drv){
   const buffers=rows.filter(r=>r.sim.slotInfo).map(r=>r.sim.slotInfo.diff);
   const tight=buffers.length?Math.min(...buffers):null;
   const issues=counts.risk+counts.violation;
-  const tile=(cls,ico,val,lab)=>`<div class="tile ${cls}"><div class="ico">${ico}</div><div class="kv"><b>${val}</b><span>${lab}</span></div></div>`;
+  const body=(ico,val,lab)=>`<div class="ico">${ico}</div><div class="kv"><b>${val}</b><span>${lab}</span></div>`;
+  const tile=(cls,ico,val,lab,f)=>{
+    if(!f)return `<div class="tile ${cls}">${body(ico,val,lab)}</div>`;
+    const on=state.filter===f;
+    return `<button class="tile ${cls}${on?" on":""}" aria-pressed="${on}" title="${
+      on?"Showing only these — press again for the whole board":"Show only these trucks on the board"
+      }" onclick="A.tileFilter('${on?"all":f}')">${body(ico,val,lab)}</button>`};
   const dim=v=>"<span style='font-size:13px;color:var(--text3);font-weight:500'> "+v+"</span>";
   const trucks=tile("",I.truck,rows.length+dim("/ "+MAX_TRUCKS),"Trucks planned");
   const buffer=tile(tight===null?"":tight<0?"bad":tight<20?"risk":"ok",I.target,
-      tight===null?"—":(tight<0?"−":"+")+fmtHM(Math.abs(tight)),"Tightest slot buffer");
-  const delays=tile(delayed?"risk":"",I.cone,delayed?delayed+dim("· "+delayMin+"m"):"0","Trucks delayed");
+      tight===null?"—":(tight<0?"−":"+")+fmtHM(Math.abs(tight)),"Tightest slot buffer",
+      tight===null?null:"tight");
+  const delays=tile(delayed?"risk":"",I.cone,delayed?delayed+dim("· "+delayMin+"m"):"0","Trucks delayed",
+      delayed?"delayed":null);
   const fix=tile(counts.violation?"bad":issues?"risk":"ok",issues?I.alert:I.check,
-      issues||"0",issues?"Tours to fix":"All tours legal");
+      issues||"0",issues?"Tours to fix":"All tours legal",issues?"issues":null);
   // Six tiles either way, but a shift asks different questions than a plan does:
   // while the day is running, who is close and who is done beats fleet totals.
   let set;
@@ -1481,8 +1530,8 @@ function renderTiles(rows,drv){
     set=[trucks,
       tile(overdue?"bad":soon?"risk":"",I.clock,
         soon+(overdue?"<span style='font-size:13px;color:var(--bad-t);font-weight:600'> · "+overdue+" overdue</span>":""),
-        "Arriving within 1h"),
-      tile(arrived?"ok":"",I.check,arrived+dim("/ "+rows.length),"Arrived"),
+        "Arriving within 1h",soon+overdue?"due":null),
+      tile(arrived?"ok":"",I.check,arrived+dim("/ "+rows.length),"Arrived",arrived?"arrived":null),
       buffer,delays,fix];
   }else{
     set=[trucks,tile("",I.drivers,drivers.size,"Drivers on duty"),
@@ -1500,6 +1549,11 @@ function renderBoard(rows){
       const n=f==="all"?rows.length:counts[f];
       return `<button class="chip ${on?"on":""} ${s?"s-"+s:""}" onclick="A.filter('${f}')">${
         s?`<span class="dot" style="background:${SC[s]}"></span>`:""}${lab} ${n}</button>`}).join("")+
+    // A tile filter has no chip of its own, and without one the board would be cut
+    // down with nothing on the bar saying so — the tiles scroll out of sight.
+    (TILE_FILTER[state.filter]
+      ?`<button class="chip on" title="Press to show the whole board again" onclick="A.filter('all')">${
+         TILE_FILTER[state.filter]} ${filterRows(rows,state.filter).length} ✕</button>`:"")+
     `<div style="flex:1"></div>
      ${rows.some(r=>r.tr.trafficDelay||r.tr.rampDelay)?`<button class="btn sm" onclick="A.clearDelays()">Clear delays</button>`:""}
      ${rows.length?`<button class="btn sm danger" onclick="A.reset()">Clear day</button>`:""}`;
@@ -1521,7 +1575,7 @@ function renderBoard(rows){
   const hay=r=>[r.tr.name,r.tr.driver,r.tr.driver2,r.tr.trailer,
     ...r.tr.segments.map(sg=>[sg.label,sg.takes,sg.meet].filter(Boolean).join(" "))]
     .filter(Boolean).join(" ").toLowerCase();
-  const visible=rows.filter(r=>(state.filter==="all"||r.st===state.filter)&&(!q||hay(r).includes(q)));
+  const visible=filterRows(rows,state.filter).filter(r=>!q||hay(r).includes(q));
   if(!visible.length){view.innerHTML=`<div class="empty"><div class="eh">No trucks match</div>
     <div class="es">${q?`Nothing for “${esc(q)}”.`:""} Try a different filter.</div></div>`;return}
 
