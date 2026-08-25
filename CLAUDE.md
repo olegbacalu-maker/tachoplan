@@ -32,6 +32,14 @@ and `routeBody` hold the parts of the split and the map request that are worth
 checking without a browser or a key. Neither the harness nor its playwright
 dependency belongs in the repository.
 
+A change to the engine is worth running against the build before it, not only
+against the cases it was written for. Two harnesses side by side — the working
+tree and `git show HEAD:index.html` — over a few hundred generated tours answer
+what the scenarios cannot: what else moved. Name the tours that must NOT move
+before looking, and the sum that has to survive. For the delay fix those were a
+tour carrying no delay, a tour already stamped to its end, and the total driving
+minutes, which cannot change when the same minutes are only placed elsewhere.
+
 ## The engine
 
 `simulate(tr, dateStr)` walks one truck's `segments[]` from `tr.start` and
@@ -172,7 +180,8 @@ articles are worth naming; the JavaScript is not.
 
 - Bump **both** version numbers in the same commit: `CACHE` in `sw.js` and the
   `ver` line in the sidebar. Miss `CACHE` and installed clients keep serving the
-  old build from cache.
+  old build from cache. A commit that touches no build file leaves both where they
+  are — documentation alone is not a build; the version names the build, not the day.
 - Keep the CSV documented in three places consistent with the exporter: the
   comment above the parser, the `EXAMPLE()` template, and the README.
 - Never add a build step, a dependency, a CDN link or an external font URL. The
@@ -184,15 +193,24 @@ articles are worth naming; the JavaScript is not.
 - Nothing may go to the network on its own. The dispatcher presses Measure, for
   one tour, or nothing leaves the device. A board opened in a yard with no signal
   must show every distance already measured and behave exactly as it did before.
+- The board is run from a copy of `index.html` in a folder on a laptop, not from
+  a URL, so a push reaches nobody by itself and the dispatcher replaces the file
+  by hand. ИНСТРУКЦИЯ carries those steps and names the sidebar version as the
+  one check that the new file is the one being opened. Splitting the app across
+  more files, or moving where the version is shown, breaks that procedure.
 - Never relicense. The all-rights-reserved terms are deliberate, and
   `fonts/OFL.txt` must stay with the font it covers.
 - Never commit files kept outside the repository for privacy. `.gitignore`
   guards the historical path; anything personal belongs outside this folder.
 
 The engine decides whether a driver's day is legal. It has been dangerously
-wrong once already — a driver stopping exactly at 4h30 was charged a phantom
+wrong twice already. A driver stopping exactly at 4h30 was charged a phantom
 second break while a real five-hour over-run was hidden behind a break the plan
-drew for him. Both were found by review, not by use. Check the boundaries every
-time: exactly at 4h30, later than 4h30, across midnight, inside a swap, inside a
-break the plan already had, with a crew of two, and against a board saved before
-the field you are adding existed.
+drew for him. Later, a live delay parked at the end of the day let every slot in
+between read as kept, and buried a 4h48 over-run under an automatic break drawn
+at 4h30 — the same failure reached from the other end of the tour. Both times the
+plan covered for reality instead of reporting it, and both were found by review,
+not by use. Check the boundaries every time: exactly at 4h30, later than 4h30,
+across midnight, inside a swap, inside a break the plan already had, with a crew
+of two, with a live delay on the truck, against a stop already stamped `arrived`,
+and against a board saved before the field you are adding existed.
